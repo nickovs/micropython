@@ -2108,6 +2108,20 @@ STATIC void compile_lambdef(compiler_t *comp, mp_parse_node_struct_t *pns) {
     compile_funcdef_lambdef(comp, this_scope, pns->nodes[0], PN_varargslist);
 }
 
+STATIC void compile_namedexpr_helper(compiler_t *comp, mp_parse_node_t pn_name, mp_parse_node_t pn_expr) {
+    if (!(MP_PARSE_NODE_IS_LEAF(pn_name) && MP_PARSE_NODE_IS_ID(pn_name))) {
+        compile_syntax_error(comp, (mp_parse_node_t)pn_name, "can't assign to expression");
+    }
+    qstr arg = MP_PARSE_NODE_LEAF_ARG(pn_name);
+    compile_node(comp, pn_expr);
+    EMIT(dup_top);
+    compile_store_id(comp, arg);
+}
+
+STATIC void compile_namedexpr(compiler_t *comp, mp_parse_node_struct_t *pns) {
+    compile_namedexpr_helper(comp, pns->nodes[0], pns->nodes[1]);
+}
+
 STATIC void compile_or_and_test(compiler_t *comp, mp_parse_node_struct_t *pns) {
     bool cond = MP_PARSE_NODE_STRUCT_KIND(pns) == PN_or_test;
     uint l_end = comp_next_label(comp);
@@ -2371,7 +2385,10 @@ STATIC void compile_trailer_paren_helper(compiler_t *comp, mp_parse_node_t pn_ar
                 star_flags |= MP_EMIT_STAR_FLAG_DOUBLE;
                 dblstar_args_node = pns_arg;
             } else if (MP_PARSE_NODE_STRUCT_KIND(pns_arg) == PN_argument) {
-                if (!MP_PARSE_NODE_IS_STRUCT_KIND(pns_arg->nodes[1], PN_comp_for)) {
+                if (MP_PARSE_NODE_IS_STRUCT_KIND(pns_arg->nodes[1], PN_argument_4)) {
+                    compile_namedexpr_helper(comp, pns_arg->nodes[0], ((mp_parse_node_struct_t*)pns_arg->nodes[1])->nodes[0]);
+                    n_positional++;
+                } else if (!MP_PARSE_NODE_IS_STRUCT_KIND(pns_arg->nodes[1], PN_comp_for)) {
                     if (!MP_PARSE_NODE_IS_ID(pns_arg->nodes[0])) {
                         compile_syntax_error(comp, (mp_parse_node_t)pns_arg, "LHS of keyword arg must be an id");
                         return;
