@@ -289,16 +289,33 @@ STATIC void compile_load_id(compiler_t *comp, qstr qst) {
     }
 }
 
-STATIC void compile_store_id(compiler_t *comp, qstr qst) {
+STATIC void compile_store_id_in_scope(compiler_t *comp, scope_t *scope, qstr qst) {
     if (comp->pass == MP_PASS_SCOPE) {
-        mp_emit_common_get_id_for_modification(comp->scope_cur, qst);
+        mp_emit_common_get_id_for_modification(scope, qst);
     } else {
         #if NEED_METHOD_TABLE
-        mp_emit_common_id_op(comp->emit, &comp->emit_method_table->store_id, comp->scope_cur, qst);
+        mp_emit_common_id_op(comp->emit, &comp->emit_method_table->store_id, scope, qst);
         #else
-        mp_emit_common_id_op(comp->emit, &mp_emit_bc_method_table_store_id_ops, comp->scope_cur, qst);
+        mp_emit_common_id_op(comp->emit, &mp_emit_bc_method_table_store_id_ops, scope, qst);
         #endif
     }
+}
+
+STATIC void compile_store_id(compiler_t *comp, qstr qst) {
+    compile_store_id_in_scope(comp, comp->scope_cur, qst);
+}
+
+STATIC void compile_store_id_skip_comp(compiler_t *comp, qstr qst) {
+    scope_t *scope = comp->scope_cur;
+    scope_kind_t kind = scope->kind;
+    if (scope->parent != NULL &&
+        (kind == SCOPE_LIST_COMP ||
+         kind == SCOPE_DICT_COMP ||
+         kind == SCOPE_SET_COMP ||
+         kind == SCOPE_GEN_EXPR) ) {
+        scope = scope->parent;
+    }
+    compile_store_id_in_scope(comp, scope, qst);
 }
 
 STATIC void compile_delete_id(compiler_t *comp, qstr qst) {
@@ -2115,7 +2132,7 @@ STATIC void compile_namedexpr_helper(compiler_t *comp, mp_parse_node_t pn_name, 
     qstr arg = MP_PARSE_NODE_LEAF_ARG(pn_name);
     compile_node(comp, pn_expr);
     EMIT(dup_top);
-    compile_store_id(comp, arg);
+    compile_store_id_skip_comp(comp, arg);
 }
 
 STATIC void compile_namedexpr(compiler_t *comp, mp_parse_node_struct_t *pns) {
