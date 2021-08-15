@@ -1,7 +1,7 @@
-:mod:`ubluetooth` --- low-level Bluetooth
-=========================================
+:mod:`bluetooth` --- low-level Bluetooth
+========================================
 
-.. module:: ubluetooth
+.. module:: bluetooth
    :synopsis: Low-level Bluetooth radio functionality
 
 This module provides an interface to a Bluetooth controller on a board.
@@ -110,7 +110,7 @@ Event Handling
 
     **Note:** As an optimisation to prevent unnecessary allocations, the ``addr``,
     ``adv_data``, ``char_data``, ``notify_data``, and ``uuid`` entries in the
-    tuples are read-only memoryview instances pointing to ubluetooth's internal
+    tuples are read-only memoryview instances pointing to :mod:`bluetooth`'s internal
     ringbuffer, and are only valid during the invocation of the IRQ handler
     function.  If your program needs to save one of these values to access after
     the IRQ handler has returned (e.g. by saving it in a class instance or global
@@ -293,7 +293,7 @@ For the ``_IRQ_PASSKEY_ACTION`` event, the available actions are::
     _PASSKEY_ACTION_NUMERIC_COMPARISON = const(4)
 
 In order to save space in the firmware, these constants are not included on the
-:mod:`ubluetooth` module. Add the ones that you need from the list above to your
+:mod:`bluetooth` module. Add the ones that you need from the list above to your
 program.
 
 
@@ -485,9 +485,13 @@ writes from a client to a given characteristic, use
     Reads the local value for this handle (which has either been written by
     :meth:`gatts_write <BLE.gatts_write>` or by a remote client).
 
-.. method:: BLE.gatts_write(value_handle, data, /)
+.. method:: BLE.gatts_write(value_handle, data, send_update=False, /)
 
     Writes the local value for this handle, which can be read by a client.
+
+    If *send_update* is ``True``, then any subscribed clients will be notified
+    (or indicated, depending on what they're subscribed to and which operations
+    the characteristic supports) about this write.
 
 .. method:: BLE.gatts_notify(conn_handle, value_handle, data=None, /)
 
@@ -499,16 +503,19 @@ writes from a client to a given characteristic, use
     Otherwise, if *data* is ``None``, then the current local value (as
     set with :meth:`gatts_write <BLE.gatts_write>`) will be sent.
 
+    **Note:** The notification will be sent regardless of the subscription
+    status of the client to this characteristic.
+
 .. method:: BLE.gatts_indicate(conn_handle, value_handle, /)
 
-    Sends an indication request to a connected client.
-
-    **Note:** This does not currently support sending a custom value, it will
-    always send the current local value (as set with :meth:`gatts_write
-    <BLE.gatts_write>`).
+    Sends an indication request containing the characteristic's current value to
+    a connected client.
 
     On acknowledgment (or failure, e.g. timeout), the
     ``_IRQ_GATTS_INDICATE_DONE`` event will be raised.
+
+    **Note:** The indication will be sent regardless of the subscription
+    status of the client to this characteristic.
 
 .. method:: BLE.gatts_set_buffer(value_handle, len, append=False, /)
 
