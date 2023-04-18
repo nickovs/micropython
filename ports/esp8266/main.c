@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "py/builtin.h"
 #include "py/compile.h"
 #include "py/runtime.h"
 #include "py/stackctrl.h"
@@ -67,14 +68,13 @@ STATIC void mp_reset(void) {
         mp_obj_t args[2];
         args[0] = MP_OBJ_NEW_SMALL_INT(0);
         args[1] = MP_OBJ_NEW_SMALL_INT(115200);
-        args[0] = pyb_uart_type.make_new(&pyb_uart_type, 2, 0, args);
+        args[0] = MP_OBJ_TYPE_GET_SLOT(&pyb_uart_type, make_new)(&pyb_uart_type, 2, 0, args);
         args[1] = MP_OBJ_NEW_SMALL_INT(1);
-        extern mp_obj_t os_dupterm(size_t n_args, const mp_obj_t *args);
-        os_dupterm(2, args);
+        mp_uos_dupterm_obj.fun.var(2, args);
     }
 
     #if MICROPY_MODULE_FROZEN
-    pyexec_frozen_module("_boot.py");
+    pyexec_frozen_module("_boot.py", false);
     pyexec_file_if_exists("boot.py");
     if (pyexec_mode_kind == PYEXEC_MODE_FRIENDLY_REPL) {
         pyexec_file_if_exists("main.py");

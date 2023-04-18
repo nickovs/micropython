@@ -408,6 +408,16 @@ int mp_bluetooth_gap_peripheral_connect(uint8_t addr_type, const uint8_t *addr, 
     return MP_EOPNOTSUPP;
 }
 
+int mp_bluetooth_gap_peripheral_connect_cancel(void) {
+    DEBUG_printf("mp_bluetooth_gap_peripheral_connect_cancel\n");
+    if (!mp_bluetooth_is_active()) {
+        return ERRNO_BLUETOOTH_NOT_ACTIVE;
+    }
+    return MP_EOPNOTSUPP;
+}
+
 #endif // MICROPY_PY_BLUETOOTH_ENABLE_CENTRAL_MODE
+
+MP_REGISTER_ROOT_POINTER(struct _mp_bluetooth_zephyr_root_pointers_t *bluetooth_zephyr_root_pointers);
 
 #endif // MICROPY_PY_BLUETOOTH

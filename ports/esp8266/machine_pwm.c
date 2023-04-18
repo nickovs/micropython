@@ -25,6 +25,7 @@
  */
 
 #include "py/runtime.h"
+#include "py/mphal.h"
 #include "modmachine.h"
 
 #include "esppwm.h"
@@ -74,6 +75,10 @@ STATIC void mp_machine_pwm_init_helper(machine_pwm_obj_t *self, size_t n_args, c
         pwm_set_duty(args[ARG_duty].u_int, self->channel);
     }
 
+    if (pin_mode[self->pin->phys_port] == GPIO_MODE_OPEN_DRAIN) {
+        mp_hal_pin_open_drain(self->pin->phys_port);
+    }
+
     pwm_start();
 }
 
@@ -82,8 +87,7 @@ STATIC mp_obj_t mp_machine_pwm_make_new(const mp_obj_type_t *type, size_t n_args
     pyb_pin_obj_t *pin = mp_obj_get_pin_obj(args[0]);
 
     // create PWM object from the given pin
-    machine_pwm_obj_t *self = m_new_obj(machine_pwm_obj_t);
-    self->base.type = &machine_pwm_type;
+    machine_pwm_obj_t *self = mp_obj_malloc(machine_pwm_obj_t, &machine_pwm_type);
     self->pin = pin;
     self->active = 0;
     self->channel = -1;
@@ -121,6 +125,10 @@ STATIC mp_obj_t mp_machine_pwm_duty_get(machine_pwm_obj_t *self) {
     if (!self->active) {
         pwm_add(self->pin->phys_port, self->pin->periph, self->pin->func);
         self->active = 1;
+
+        if (pin_mode[self->pin->phys_port] == GPIO_MODE_OPEN_DRAIN) {
+            mp_hal_pin_open_drain(self->pin->phys_port);
+        }
     }
     return MP_OBJ_NEW_SMALL_INT(pwm_get_duty(self->channel));
 }

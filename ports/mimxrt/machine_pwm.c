@@ -214,7 +214,11 @@ STATIC void configure_flexpwm(machine_pwm_obj_t *self) {
     pwm_signal_param_u16_t pwmSignal;
 
     // Initialize PWM module.
+    #if defined(MIMXRT117x_SERIES)
+    uint32_t pwmSourceClockInHz = CLOCK_GetRootClockFreq(kCLOCK_Root_Bus);
+    #else
     uint32_t pwmSourceClockInHz = CLOCK_GetFreq(kCLOCK_IpgClk);
+    #endif
 
     int prescale = calc_prescaler(pwmSourceClockInHz, self->freq);
     if (prescale < 0) {
@@ -296,10 +300,15 @@ STATIC void configure_flexpwm(machine_pwm_obj_t *self) {
 STATIC void configure_qtmr(machine_pwm_obj_t *self) {
     qtmr_config_t qtmrConfig;
     int prescale;
+    #if defined(MIMXRT117x_SERIES)
+    uint32_t pwmSourceClockInHz = CLOCK_GetRootClockFreq(kCLOCK_Root_Bus);
+    #else
+    uint32_t pwmSourceClockInHz = CLOCK_GetFreq(kCLOCK_IpgClk);
+    #endif
 
     TMR_Type *instance = (TMR_Type *)self->instance;
 
-    prescale = calc_prescaler(CLOCK_GetFreq(kCLOCK_IpgClk), self->freq);
+    prescale = calc_prescaler(pwmSourceClockInHz, self->freq);
     if (prescale < 0) {
         mp_raise_ValueError(MP_ERROR_TEXT(ERRMSG_FREQ));
     }
@@ -311,7 +320,7 @@ STATIC void configure_qtmr(machine_pwm_obj_t *self) {
     }
     // Set up the PWM channel
     if (QTMR_SetupPwm_u16(instance, self->channel1, self->freq, self->duty_u16,
-        self->invert, CLOCK_GetFreq(kCLOCK_IpgClk) / (1 << prescale), self->is_init) == kStatus_Fail) {
+        self->invert, pwmSourceClockInHz / (1 << prescale), self->is_init) == kStatus_Fail) {
         mp_raise_ValueError(MP_ERROR_TEXT(ERRMSG_INIT));
     }
     // Start the output
@@ -325,7 +334,9 @@ STATIC void configure_pwm(machine_pwm_obj_t *self) {
     static bool set_frequency = true;
     // set the frequency only once
     if (set_frequency) {
+        #if !defined(MIMXRT117x_SERIES)
         CLOCK_SetDiv(kCLOCK_IpgDiv, 0x3); // Set IPG PODF to 3, divide by 4
+        #endif
         set_frequency = false;
     }
 
@@ -494,8 +505,7 @@ STATIC mp_obj_t mp_machine_pwm_make_new(const mp_obj_type_t *type, size_t n_args
     }
 
     // Create and populate the PWM object.
-    machine_pwm_obj_t *self = m_new_obj(machine_pwm_obj_t);
-    self->base.type = &machine_pwm_type;
+    machine_pwm_obj_t *self = mp_obj_malloc(machine_pwm_obj_t, &machine_pwm_type);
     self->is_flexpwm = is_flexpwm;
     self->instance = af_obj1->instance;
     self->module = module;
@@ -518,7 +528,7 @@ STATIC mp_obj_t mp_machine_pwm_make_new(const mp_obj_type_t *type, size_t n_args
     IOMUXC_SetPinMux(pin1->muxRegister, af_obj1->af_mode, af_obj1->input_register, af_obj1->input_daisy,
         pin1->configRegister, 0U);
     IOMUXC_SetPinConfig(pin1->muxRegister, af_obj1->af_mode, af_obj1->input_register, af_obj1->input_daisy,
-        pin1->configRegister, 0x10B0U);
+        pin1->configRegister, pin_generate_config(PIN_PULL_DISABLED, PIN_MODE_OUT, PIN_DRIVE_5, pin1->configRegister));
 
     // Settings for the second pin, if given.
     if (pin2 != NULL && pin2 != pin1) {
@@ -529,7 +539,7 @@ STATIC mp_obj_t mp_machine_pwm_make_new(const mp_obj_type_t *type, size_t n_args
         IOMUXC_SetPinMux(pin2->muxRegister, af_obj2->af_mode, af_obj2->input_register, af_obj2->input_daisy,
             pin2->configRegister, 0U);
         IOMUXC_SetPinConfig(pin2->muxRegister, af_obj2->af_mode, af_obj2->input_register, af_obj2->input_daisy,
-            pin2->configRegister, 0x10B0U);
+            pin2->configRegister, pin_generate_config(PIN_PULL_DISABLED, PIN_MODE_OUT, PIN_DRIVE_5, pin2->configRegister));
     } else {
         self->complementary = 0;
     }

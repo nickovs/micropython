@@ -27,6 +27,8 @@
 #define MICROPY_HW_BOARD_NAME       "PYBD-SF2W"
 #define MICROPY_HW_MCU_NAME         "STM32F722IEK"
 
+#define MICROPY_PY_NETWORK_HOSTNAME_DEFAULT "PYBD"
+
 #define MICROPY_PY_PYB_LEGACY       (1)
 #define MICROPY_HW_ENABLE_INTERNAL_FLASH_STORAGE (0)
 #define MICROPY_HW_HAS_SWITCH       (1)
@@ -84,7 +86,7 @@ extern struct _spi_bdev_t spi_bdev;
     (op) == BDEV_IOCTL_NUM_BLOCKS ? (MICROPY_HW_SPIFLASH_SIZE_BITS / 8 / FLASH_BLOCK_SIZE) : \
     (op) == BDEV_IOCTL_INIT ? spi_bdev_ioctl(&spi_bdev, (op), (uint32_t)&spiflash_config) : \
     spi_bdev_ioctl(&spi_bdev, (op), (arg)) \
-)
+    )
 #define MICROPY_HW_BDEV_READBLOCKS(dest, bl, n) spi_bdev_readblocks(&spi_bdev, (dest), (bl), (n))
 #define MICROPY_HW_BDEV_WRITEBLOCKS(src, bl, n) spi_bdev_writeblocks(&spi_bdev, (src), (bl), (n))
 #define MICROPY_HW_BDEV_SPIFLASH_EXTENDED (&spi_bdev) // for extended block protocol
@@ -194,6 +196,7 @@ extern struct _spi_bdev_t spi_bdev2;
 #define MICROPY_HW_BLE_UART_ID       (PYB_UART_6)
 #define MICROPY_HW_BLE_UART_BAUDRATE (115200)
 #define MICROPY_HW_BLE_UART_BAUDRATE_SECONDARY (3000000)
+#define MICROPY_HW_BLE_UART_BAUDRATE_DOWNLOAD_FIRMWARE (3000000)
 
 /******************************************************************************/
 // Bootloader configuration
@@ -221,5 +224,5 @@ extern struct _spi_bdev_t spi_bdev2;
 #define MBOOT_SPIFLASH2_SPIFLASH    (&spi_bdev2.spiflash)
 #define MBOOT_SPIFLASH2_CONFIG      (&spiflash2_config)
 
-#define MBOOT_BOARD_EARLY_INIT mboot_board_early_init
+#define MBOOT_BOARD_EARLY_INIT(initial_r0) mboot_board_early_init()
 void mboot_board_early_init(void);

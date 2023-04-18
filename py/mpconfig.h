@@ -28,8 +28,8 @@
 
 // Current version of MicroPython
 #define MICROPY_VERSION_MAJOR 1
-#define MICROPY_VERSION_MINOR 17
-#define MICROPY_VERSION_MICRO 0
+#define MICROPY_VERSION_MINOR 19
+#define MICROPY_VERSION_MICRO 1
 
 // Combined version as a 32-bit number for convenience
 #define MICROPY_VERSION ( \
@@ -56,12 +56,6 @@
 // release vs debug configs, etc. Note that if you switch from one config
 // to another, you must rebuild from scratch using "-B" switch to make.
 
-#ifdef MP_CONFIGFILE
-#include MP_CONFIGFILE
-#else
-#include <mpconfigport.h>
-#endif
-
 // Disable all optional features (i.e. minimal port).
 #define MICROPY_CONFIG_ROM_LEVEL_MINIMUM (0)
 // Only enable core features (constrained flash, e.g. STM32L072)
@@ -74,6 +68,12 @@
 #define MICROPY_CONFIG_ROM_LEVEL_FULL_FEATURES (40)
 // Enable everything (e.g. coverage)
 #define MICROPY_CONFIG_ROM_LEVEL_EVERYTHING (50)
+
+#ifdef MP_CONFIGFILE
+#include MP_CONFIGFILE
+#else
+#include <mpconfigport.h>
+#endif
 
 // Ports/boards should set this, but default to level=core.
 #ifndef MICROPY_CONFIG_ROM_LEVEL
@@ -328,6 +328,14 @@
 #define MICROPY_PERSISTENT_CODE (MICROPY_PERSISTENT_CODE_LOAD || MICROPY_PERSISTENT_CODE_SAVE || MICROPY_MODULE_FROZEN_MPY)
 #endif
 
+// Whether bytecode uses a qstr_table to map internal qstr indices in the bytecode
+// to global qstr values in the runtime (behaviour when feature is enabled), or
+// just stores global qstr values directly in the bytecode.  This must be enabled
+// if MICROPY_PERSISTENT_CODE is enabled.
+#ifndef MICROPY_EMIT_BYTECODE_USES_QSTR_TABLE
+#define MICROPY_EMIT_BYTECODE_USES_QSTR_TABLE (MICROPY_PERSISTENT_CODE)
+#endif
+
 // Whether to emit x64 native code
 #ifndef MICROPY_EMIT_X64
 #define MICROPY_EMIT_X64 (0)
@@ -351,11 +359,6 @@
 // Whether to enable the thumb inline assembler
 #ifndef MICROPY_EMIT_INLINE_THUMB
 #define MICROPY_EMIT_INLINE_THUMB (0)
-#endif
-
-// Whether to enable ARMv7-M instruction support in the Thumb2 inline assembler
-#ifndef MICROPY_EMIT_INLINE_THUMB_ARMV7M
-#define MICROPY_EMIT_INLINE_THUMB_ARMV7M (1)
 #endif
 
 // Whether to enable float support in the Thumb2 inline assembler
@@ -386,8 +389,10 @@
 // Convenience definition for whether any native emitter is enabled
 #define MICROPY_EMIT_NATIVE (MICROPY_EMIT_X64 || MICROPY_EMIT_X86 || MICROPY_EMIT_THUMB || MICROPY_EMIT_ARM || MICROPY_EMIT_XTENSA || MICROPY_EMIT_XTENSAWIN)
 
-// Select prelude-as-bytes-object for certain emitters
-#define MICROPY_EMIT_NATIVE_PRELUDE_AS_BYTES_OBJ (MICROPY_EMIT_XTENSAWIN)
+// Some architectures cannot read byte-wise from executable memory.  In this case
+// the prelude for a native function (which usually sits after the machine code)
+// must be separated and placed somewhere where it can be read byte-wise.
+#define MICROPY_EMIT_NATIVE_PRELUDE_SEPARATE_FROM_MACHINE_CODE (MICROPY_EMIT_XTENSAWIN)
 
 // Convenience definition for whether any inline assembler emitter is enabled
 #define MICROPY_EMIT_INLINE_ASM (MICROPY_EMIT_INLINE_THUMB || MICROPY_EMIT_INLINE_XTENSA)
@@ -421,16 +426,15 @@
 #define MICROPY_DYNAMIC_COMPILER (0)
 #endif
 
-// Configure dynamic compiler macros
-#if MICROPY_DYNAMIC_COMPILER
-#define MICROPY_PY_BUILTINS_STR_UNICODE_DYNAMIC (mp_dynamic_compiler.py_builtins_str_unicode)
-#else
-#define MICROPY_PY_BUILTINS_STR_UNICODE_DYNAMIC MICROPY_PY_BUILTINS_STR_UNICODE
-#endif
-
 // Whether to enable constant folding; eg 1+2 rewritten as 3
 #ifndef MICROPY_COMP_CONST_FOLDING
 #define MICROPY_COMP_CONST_FOLDING (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
+#endif
+
+// Whether to compile constant tuples immediately to their respective objects; eg (1, True)
+// Otherwise the tuple will be built at runtime
+#ifndef MICROPY_COMP_CONST_TUPLE
+#define MICROPY_COMP_CONST_TUPLE (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
 #endif
 
 // Whether to enable optimisations for constant literals, eg OrderedDict
@@ -504,6 +508,11 @@
 // Whether to enable a simple VM stack overflow check
 #ifndef MICROPY_DEBUG_VM_STACK_OVERFLOW
 #define MICROPY_DEBUG_VM_STACK_OVERFLOW (0)
+#endif
+
+// Whether to enable extra instrumentation for valgrind
+#ifndef MICROPY_DEBUG_VALGRIND
+#define MICROPY_DEBUG_VALGRIND (0)
 #endif
 
 /*****************************************************************************/
@@ -602,9 +611,19 @@
 #define MICROPY_ENABLE_GC (0)
 #endif
 
+// Whether the garbage-collected heap can be split over multiple memory areas.
+#ifndef MICROPY_GC_SPLIT_HEAP
+#define MICROPY_GC_SPLIT_HEAP (0)
+#endif
+
 // Hook to run code during time consuming garbage collector operations
 #ifndef MICROPY_GC_HOOK_LOOP
 #define MICROPY_GC_HOOK_LOOP
+#endif
+
+// Whether to provide m_tracked_calloc, m_tracked_free functions
+#ifndef MICROPY_TRACKED_ALLOC
+#define MICROPY_TRACKED_ALLOC (0)
 #endif
 
 // Whether to enable finalisers in the garbage collector (ie call __del__)
@@ -669,7 +688,7 @@
 // This adds Alt+F, Alt+B, Alt+D and Alt+Backspace for forward-word, backward-word, forward-kill-word
 // and backward-kill-word, respectively.
 #ifndef MICROPY_REPL_EMACS_WORDS_MOVE
-#define MICROPY_REPL_EMACS_WORDS_MOVE (0)
+#define MICROPY_REPL_EMACS_WORDS_MOVE (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
 // Whether to include extra convenience keys for word movement/kill in readline REPL.
@@ -677,7 +696,7 @@
 // respectively. Ctrl+Delete is not implemented because it's a very different escape sequence.
 // Depends on MICROPY_REPL_EMACS_WORDS_MOVE.
 #ifndef MICROPY_REPL_EMACS_EXTRA_WORDS_MOVE
-#define MICROPY_REPL_EMACS_EXTRA_WORDS_MOVE (0)
+#define MICROPY_REPL_EMACS_EXTRA_WORDS_MOVE (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
 // Whether to implement auto-indent in REPL
@@ -688,6 +707,11 @@
 // Whether port requires event-driven REPL functions
 #ifndef MICROPY_REPL_EVENT_DRIVEN
 #define MICROPY_REPL_EVENT_DRIVEN (0)
+#endif
+
+// The number of items to keep in the readline history.
+#ifndef MICROPY_READLINE_HISTORY_SIZE
+#define MICROPY_READLINE_HISTORY_SIZE (8)
 #endif
 
 // Whether to include lexer helper function for unix
@@ -783,7 +807,7 @@ typedef double mp_float_t;
 // Whether to provide a high-quality hash for float and complex numbers.
 // Otherwise the default is a very simple but correct hashing function.
 #ifndef MICROPY_FLOAT_HIGH_QUALITY_HASH
-#define MICROPY_FLOAT_HIGH_QUALITY_HASH (0)
+#define MICROPY_FLOAT_HIGH_QUALITY_HASH (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
 // Enable features which improve CPython compatibility
@@ -812,6 +836,12 @@ typedef double mp_float_t;
 // (useful for porting existing libraries to MicroPython).
 #ifndef MICROPY_STREAMS_POSIX_API
 #define MICROPY_STREAMS_POSIX_API (0)
+#endif
+
+// Whether modules can use MP_MODULE_ATTR_DELEGATION_ENTRY() to delegate failed
+// attribute lookups.
+#ifndef MICROPY_MODULE_ATTR_DELEGATION
+#define MICROPY_MODULE_ATTR_DELEGATION (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
 #endif
 
 // Whether to call __init__ when importing builtin modules for the first time
@@ -874,9 +904,24 @@ typedef double mp_float_t;
 #define MICROPY_USE_INTERNAL_PRINTF (1)
 #endif
 
+// The mp_print_t printer used for printf output when MICROPY_USE_INTERNAL_PRINTF is enabled
+#ifndef MICROPY_INTERNAL_PRINTF_PRINTER
+#define MICROPY_INTERNAL_PRINTF_PRINTER (&mp_plat_print)
+#endif
+
+// Whether to support mp_sched_vm_abort to asynchronously abort to the top level.
+#ifndef MICROPY_ENABLE_VM_ABORT
+#define MICROPY_ENABLE_VM_ABORT (0)
+#endif
+
 // Support for internal scheduler
 #ifndef MICROPY_ENABLE_SCHEDULER
 #define MICROPY_ENABLE_SCHEDULER (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
+#endif
+
+// Whether the scheduler supports scheduling static nodes with C callbacks
+#ifndef MICROPY_SCHEDULER_STATIC_NODES
+#define MICROPY_SCHEDULER_STATIC_NODES (0)
 #endif
 
 // Maximum number of entries in the scheduler
@@ -890,13 +935,23 @@ typedef double mp_float_t;
 #endif
 
 // Support for VFS POSIX component, to mount a POSIX filesystem within VFS
-#ifndef MICROPY_VFS
+#ifndef MICROPY_VFS_POSIX
 #define MICROPY_VFS_POSIX (0)
 #endif
 
 // Support for VFS FAT component, to mount a FAT filesystem within VFS
-#ifndef MICROPY_VFS
+#ifndef MICROPY_VFS_FAT
 #define MICROPY_VFS_FAT (0)
+#endif
+
+// Support for VFS LittleFS v1 component, to mount a LFSv1 filesystem within VFS
+#ifndef MICROPY_VFS_LFS1
+#define MICROPY_VFS_LFS1 (0)
+#endif
+
+// Support for VFS LittleFS v2 component, to mount a LFSv2 filesystem within VFS
+#ifndef MICROPY_VFS_LFS2
+#define MICROPY_VFS_LFS2 (0)
 #endif
 
 /*****************************************************************************/
@@ -957,6 +1012,11 @@ typedef double mp_float_t;
 #define MICROPY_PY_STR_BYTES_CMP_WARN (0)
 #endif
 
+// Add bytes.hex and bytes.fromhex
+#ifndef MICROPY_PY_BUILTINS_BYTES_HEX
+#define MICROPY_PY_BUILTINS_BYTES_HEX (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
+#endif
+
 // Whether str object is proper unicode
 #ifndef MICROPY_PY_BUILTINS_STR_UNICODE
 #define MICROPY_PY_BUILTINS_STR_UNICODE (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
@@ -1009,7 +1069,7 @@ typedef double mp_float_t;
 
 // Whether to support memoryview.itemsize attribute
 #ifndef MICROPY_PY_BUILTINS_MEMORYVIEW_ITEMSIZE
-#define MICROPY_PY_BUILTINS_MEMORYVIEW_ITEMSIZE (0)
+#define MICROPY_PY_BUILTINS_MEMORYVIEW_ITEMSIZE (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
 // Whether to support set object
@@ -1054,12 +1114,12 @@ typedef double mp_float_t;
 // the same object will compare as not-equal.  With it enabled the semantics
 // match CPython and ranges are equal if they yield the same sequence of items.
 #ifndef MICROPY_PY_BUILTINS_RANGE_BINOP
-#define MICROPY_PY_BUILTINS_RANGE_BINOP (0)
+#define MICROPY_PY_BUILTINS_RANGE_BINOP (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
 // Support for callling next() with second argument
 #ifndef MICROPY_PY_BUILTINS_NEXT2
-#define MICROPY_PY_BUILTINS_NEXT2 (0)
+#define MICROPY_PY_BUILTINS_NEXT2 (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
 // Whether to support rounding of integers (incl bignum); eg round(123,-1)=120
@@ -1079,7 +1139,7 @@ typedef double mp_float_t;
 // Whether to support all inplace arithmetic operarion methods
 // (__imul__, etc.)
 #ifndef MICROPY_PY_ALL_INPLACE_SPECIAL_METHODS
-#define MICROPY_PY_ALL_INPLACE_SPECIAL_METHODS (0)
+#define MICROPY_PY_ALL_INPLACE_SPECIAL_METHODS (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
 // Whether to support reverse arithmetic operarion methods
@@ -1174,7 +1234,7 @@ typedef double mp_float_t;
 
 // Whether to provide the "micropython.heap_locked" function
 #ifndef MICROPY_PY_MICROPYTHON_HEAP_LOCKED
-#define MICROPY_PY_MICROPYTHON_HEAP_LOCKED (0)
+#define MICROPY_PY_MICROPYTHON_HEAP_LOCKED (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
 // Whether to provide "array" module. Note that large chunk of the
@@ -1213,12 +1273,17 @@ typedef double mp_float_t;
 
 // Whether to provide the _asdict function for namedtuple
 #ifndef MICROPY_PY_COLLECTIONS_NAMEDTUPLE__ASDICT
-#define MICROPY_PY_COLLECTIONS_NAMEDTUPLE__ASDICT (0)
+#define MICROPY_PY_COLLECTIONS_NAMEDTUPLE__ASDICT (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
 // Whether to provide "math" module
 #ifndef MICROPY_PY_MATH
 #define MICROPY_PY_MATH (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
+#endif
+
+// Whether to provide all math module constants (Python 3.5+), or just pi and e.
+#ifndef MICROPY_PY_MATH_CONSTANTS
+#define MICROPY_PY_MATH_CONSTANTS (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
 #endif
 
 // Whether to provide special math functions: math.{erf,erfc,gamma,lgamma}
@@ -1261,6 +1326,11 @@ typedef double mp_float_t;
 #define MICROPY_PY_CMATH (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
 #endif
 
+// Whether to provide "micropython" module
+#ifndef MICROPY_PY_MICROPYTHON
+#define MICROPY_PY_MICROPYTHON (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
+#endif
+
 // Whether to provide "gc" module
 #ifndef MICROPY_PY_GC
 #define MICROPY_PY_GC (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
@@ -1281,11 +1351,6 @@ typedef double mp_float_t;
 #define MICROPY_PY_IO_IOBASE (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
 #endif
 
-// Whether to provide "io.FileIO" class
-#ifndef MICROPY_PY_IO_FILEIO
-#define MICROPY_PY_IO_FILEIO (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
-#endif
-
 // Whether to provide "io.BytesIO" class
 #ifndef MICROPY_PY_IO_BYTESIO
 #define MICROPY_PY_IO_BYTESIO (1)
@@ -1293,7 +1358,7 @@ typedef double mp_float_t;
 
 // Whether to provide "io.BufferedWriter" class
 #ifndef MICROPY_PY_IO_BUFFEREDWRITER
-#define MICROPY_PY_IO_BUFFEREDWRITER (0)
+#define MICROPY_PY_IO_BUFFEREDWRITER (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
 // Whether to provide "struct" module
@@ -1327,6 +1392,13 @@ typedef double mp_float_t;
 #define MICROPY_PY_SYS_EXC_INFO (0)
 #endif
 
+// Whether to provide "sys.executable", which is the absolute path to the
+// micropython binary
+// Intended for use on the "OS" ports (e.g. Unix)
+#ifndef MICROPY_PY_SYS_EXECUTABLE
+#define MICROPY_PY_SYS_EXECUTABLE (0)
+#endif
+
 // Whether to provide "sys.exit" function
 #ifndef MICROPY_PY_SYS_EXIT
 #define MICROPY_PY_SYS_EXIT (1)
@@ -1337,6 +1409,11 @@ typedef double mp_float_t;
 #define MICROPY_PY_SYS_ATEXIT (0)
 #endif
 
+// Whether to provide sys.{ps1,ps2} mutable attributes, to control REPL prompts
+#ifndef MICROPY_PY_SYS_PS1_PS2
+#define MICROPY_PY_SYS_PS1_PS2 (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
+#endif
+
 // Whether to provide "sys.settrace" function
 #ifndef MICROPY_PY_SYS_SETTRACE
 #define MICROPY_PY_SYS_SETTRACE (0)
@@ -1344,7 +1421,7 @@ typedef double mp_float_t;
 
 // Whether to provide "sys.getsizeof" function
 #ifndef MICROPY_PY_SYS_GETSIZEOF
-#define MICROPY_PY_SYS_GETSIZEOF (0)
+#define MICROPY_PY_SYS_GETSIZEOF (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
 // Whether to provide sys.{stdin,stdout,stderr} objects
@@ -1356,6 +1433,17 @@ typedef double mp_float_t;
 // This is implemented per-port
 #ifndef MICROPY_PY_SYS_STDIO_BUFFER
 #define MICROPY_PY_SYS_STDIO_BUFFER (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
+#endif
+
+// Whether to provide sys.tracebacklimit mutable attribute
+#ifndef MICROPY_PY_SYS_TRACEBACKLIMIT
+#define MICROPY_PY_SYS_TRACEBACKLIMIT (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
+#endif
+
+// Whether the sys module supports attribute delegation
+// This is enabled automatically when needed by other features
+#ifndef MICROPY_PY_SYS_ATTR_DELEGATION
+#define MICROPY_PY_SYS_ATTR_DELEGATION (MICROPY_PY_SYS_PS1_PS2 || MICROPY_PY_SYS_TRACEBACKLIMIT)
 #endif
 
 // Whether to provide "uerrno" module
@@ -1442,20 +1530,28 @@ typedef double mp_float_t;
 #define MICROPY_PY_UJSON_SEPARATORS (1)
 #endif
 
+#ifndef MICROPY_PY_UOS
+#define MICROPY_PY_UOS (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
+#endif
+
+#ifndef MICROPY_PY_UOS_STATVFS
+#define MICROPY_PY_UOS_STATVFS (MICROPY_PY_UOS)
+#endif
+
 #ifndef MICROPY_PY_URE
 #define MICROPY_PY_URE (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
 #endif
 
 #ifndef MICROPY_PY_URE_DEBUG
-#define MICROPY_PY_URE_DEBUG (0)
+#define MICROPY_PY_URE_DEBUG (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
 #ifndef MICROPY_PY_URE_MATCH_GROUPS
-#define MICROPY_PY_URE_MATCH_GROUPS (0)
+#define MICROPY_PY_URE_MATCH_GROUPS (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
 #ifndef MICROPY_PY_URE_MATCH_SPAN_START_END
-#define MICROPY_PY_URE_MATCH_SPAN_START_END (0)
+#define MICROPY_PY_URE_MATCH_SPAN_START_END (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
 #ifndef MICROPY_PY_URE_SUB
@@ -1536,6 +1632,11 @@ typedef double mp_float_t;
 #define MICROPY_PY_MACHINE_I2C (0)
 #endif
 
+// Whether the low-level I2C transfer function supports a separate write as the first transfer
+#ifndef MICROPY_PY_MACHINE_I2C_TRANSFER_WRITE1
+#define MICROPY_PY_MACHINE_I2C_TRANSFER_WRITE1 (0)
+#endif
+
 // Whether to provide the "machine.SoftI2C" class
 #ifndef MICROPY_PY_MACHINE_SOFTI2C
 #define MICROPY_PY_MACHINE_SOFTI2C (0)
@@ -1550,9 +1651,22 @@ typedef double mp_float_t;
 #define MICROPY_PY_MACHINE_SOFTSPI (0)
 #endif
 
+// Whether to provide the "machine.Timer" class
+#ifndef MICROPY_PY_MACHINE_TIMER
+#define MICROPY_PY_MACHINE_TIMER (0)
+#endif
+
+// The default backlog value for socket.listen(backlog)
+#ifndef MICROPY_PY_USOCKET_LISTEN_BACKLOG_DEFAULT
+#define MICROPY_PY_USOCKET_LISTEN_BACKLOG_DEFAULT (2)
+#endif
+
 #ifndef MICROPY_PY_USSL
 #define MICROPY_PY_USSL (0)
+#endif
+
 // Whether to add finaliser code to ussl objects
+#ifndef MICROPY_PY_USSL_FINALISER
 #define MICROPY_PY_USSL_FINALISER (0)
 #endif
 
@@ -1581,19 +1695,15 @@ typedef double mp_float_t;
 #define MICROPY_PORT_BUILTINS
 #endif
 
-// Additional builtin module definitions - see objmodule.c:mp_builtin_module_table for format.
-#ifndef MICROPY_PORT_BUILTIN_MODULES
-#define MICROPY_PORT_BUILTIN_MODULES
+// Additional builtin function definitions for extension by command-line, boards or variants.
+// See modbuiltins.c:mp_module_builtins_globals_table for format.
+#ifndef MICROPY_PORT_EXTRA_BUILTINS
+#define MICROPY_PORT_EXTRA_BUILTINS
 #endif
 
 // Additional constant definitions for the compiler - see compile.c:mp_constants_table.
 #ifndef MICROPY_PORT_CONSTANTS
 #define MICROPY_PORT_CONSTANTS
-#endif
-
-// Any root pointers for GC scanning - see mpstate.c
-#ifndef MICROPY_PORT_ROOT_POINTERS
-#define MICROPY_PORT_ROOT_POINTERS
 #endif
 
 /*****************************************************************************/
@@ -1635,6 +1745,10 @@ typedef double mp_float_t;
 #define MICROPY_WRAP_MP_SCHED_SCHEDULE(f) f
 #endif
 
+#ifndef MICROPY_WRAP_MP_SCHED_VM_ABORT
+#define MICROPY_WRAP_MP_SCHED_VM_ABORT(f) f
+#endif
+
 /*****************************************************************************/
 /* Miscellaneous settings                                                    */
 
@@ -1644,6 +1758,20 @@ typedef double mp_float_t;
 // like __attribute__((aligned(4))).
 #ifndef MICROPY_OBJ_BASE_ALIGNMENT
 #define MICROPY_OBJ_BASE_ALIGNMENT
+#endif
+
+// String used for the banner, and sys.version additional information
+#ifndef MICROPY_BANNER_NAME_AND_VERSION
+#define MICROPY_BANNER_NAME_AND_VERSION "MicroPython " MICROPY_GIT_TAG " on " MICROPY_BUILD_DATE
+#endif
+
+// String used for the second part of the banner, and sys.implementation._machine
+#ifndef MICROPY_BANNER_MACHINE
+#ifdef MICROPY_HW_BOARD_NAME
+#define MICROPY_BANNER_MACHINE MICROPY_HW_BOARD_NAME " with " MICROPY_HW_MCU_NAME
+#else
+#define MICROPY_BANNER_MACHINE MICROPY_PY_SYS_PLATFORM " [" MICROPY_PLATFORM_COMPILER "] version"
+#endif
 #endif
 
 // On embedded platforms, these will typically enable/disable irqs.
