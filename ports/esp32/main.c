@@ -67,6 +67,10 @@
 #include "extmod/modbluetooth.h"
 #endif
 
+#if MICROPY_ESPNOW
+#include "modespnow.h"
+#endif
+
 // MicroPython runs as a task under FreeRTOS
 #define MP_TASK_PRIORITY        (ESP_TASK_PRIO_MIN + 1)
 #define MP_TASK_STACK_SIZE      (16 * 1024)
@@ -190,6 +194,11 @@ soft_reset_exit:
     mp_bluetooth_deinit();
     #endif
 
+    #if MICROPY_ESPNOW
+    espnow_deinit(mp_const_none);
+    MP_STATE_PORT(espnow_singleton) = NULL;
+    #endif
+
     machine_timer_deinit_all();
 
     #if MICROPY_PY_THREAD
@@ -215,8 +224,8 @@ soft_reset_exit:
     // TODO: machine_rmt_deinit_all();
     machine_pins_deinit();
     machine_deinit();
-    #if MICROPY_PY_USOCKET_EVENTS
-    usocket_events_deinit();
+    #if MICROPY_PY_SOCKET_EVENTS
+    socket_events_deinit();
     #endif
 
     mp_deinit();
