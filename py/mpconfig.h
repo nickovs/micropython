@@ -53,6 +53,12 @@
 #define MICROPY_VERSION_STRING MICROPY_VERSION_STRING_BASE
 #endif
 
+// If this is enabled, then in-progress/breaking changes slated for the 2.x
+// release will be enabled.
+#ifndef MICROPY_PREVIEW_VERSION_2
+#define MICROPY_PREVIEW_VERSION_2 (0)
+#endif
+
 // This file contains default configuration settings for MicroPython.
 // You can override any of the options below using mpconfigport.h file
 // located in a directory of your port.
@@ -1428,6 +1434,11 @@ typedef double mp_float_t;
 #define MICROPY_PY_SYS_EXECUTABLE (0)
 #endif
 
+// Whether to provide "sys.intern"
+#ifndef MICROPY_PY_SYS_INTERN
+#define MICROPY_PY_SYS_INTERN (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
+#endif
+
 // Whether to provide "sys.exit" function
 #ifndef MICROPY_PY_SYS_EXIT
 #define MICROPY_PY_SYS_EXIT (1)
@@ -1828,7 +1839,11 @@ typedef double mp_float_t;
 
 // String used for the banner, and sys.version additional information
 #ifndef MICROPY_BANNER_NAME_AND_VERSION
+#if MICROPY_PREVIEW_VERSION_2
+#define MICROPY_BANNER_NAME_AND_VERSION "MicroPython (with v2.0 preview) " MICROPY_GIT_TAG " on " MICROPY_BUILD_DATE
+#else
 #define MICROPY_BANNER_NAME_AND_VERSION "MicroPython " MICROPY_GIT_TAG " on " MICROPY_BUILD_DATE
+#endif
 #endif
 
 // String used for the second part of the banner, and sys.implementation._machine
@@ -1838,14 +1853,6 @@ typedef double mp_float_t;
 #else
 #define MICROPY_BANNER_MACHINE MICROPY_PY_SYS_PLATFORM " [" MICROPY_PLATFORM_COMPILER "] version"
 #endif
-#endif
-
-// On embedded platforms, these will typically enable/disable irqs.
-#ifndef MICROPY_BEGIN_ATOMIC_SECTION
-#define MICROPY_BEGIN_ATOMIC_SECTION() (0)
-#endif
-#ifndef MICROPY_END_ATOMIC_SECTION
-#define MICROPY_END_ATOMIC_SECTION(state) (void)(state)
 #endif
 
 // Allow to override static modifier for global objects, e.g. to use with
