@@ -30,9 +30,15 @@ project(micropython)
 set(MICROPY_PORT_DIR    ${CMAKE_CURRENT_SOURCE_DIR})
 set(MICROPY_DIR         ${MICROPY_PORT_DIR}/../..)
 set(MICROPY_TARGET      micropython)
+string(TOUPPER          ZEPHYR_${BOARD} MICROPY_BOARD)
 
 include(${MICROPY_DIR}/py/py.cmake)
 include(${MICROPY_DIR}/extmod/extmod.cmake)
+
+if (CONFIG_MICROPY_FROZEN_MODULES)
+    cmake_path(ABSOLUTE_PATH CONFIG_MICROPY_FROZEN_MANIFEST BASE_DIRECTORY ${CMAKE_CURRENT_LIST_DIR})
+    set(MICROPY_FROZEN_MANIFEST ${CONFIG_MICROPY_FROZEN_MANIFEST})
+endif()
 
 set(MICROPY_SOURCE_PORT
     main.c
@@ -61,9 +67,19 @@ set(MICROPY_SOURCE_SHARED
     runtime/mpirq.c
     runtime/pyexec.c
     runtime/stdout_helpers.c
+    runtime/sys_stdio_mphal.c
     timeutils/timeutils.c
 )
 list(TRANSFORM MICROPY_SOURCE_SHARED PREPEND ${MICROPY_DIR}/shared/)
+
+set(MICROPY_SOURCE_DRIVERS
+    bus/softspi.c
+)
+list(TRANSFORM MICROPY_SOURCE_DRIVERS PREPEND ${MICROPY_DIR}/drivers/)
+
+set(MICROPY_QSTRDEFS_PORT
+    ${MICROPY_PORT_DIR}/qstrdefsport.h
+)
 
 set(MICROPY_SOURCE_LIB
     oofatfs/ff.c
@@ -79,6 +95,7 @@ set(MICROPY_SOURCE_QSTR
     ${MICROPY_SOURCE_PY}
     ${MICROPY_SOURCE_EXTMOD}
     ${MICROPY_SOURCE_SHARED}
+    ${MICROPY_SOURCE_DRIVERS}
     ${MICROPY_SOURCE_LIB}
     ${MICROPY_SOURCE_PORT}
 )
@@ -115,13 +132,15 @@ zephyr_library_compile_definitions(
 zephyr_library_sources(${MICROPY_SOURCE_QSTR})
 zephyr_library_link_libraries(kernel)
 
-add_dependencies(${MICROPY_TARGET} zephyr_generated_headers)
-
 include(${MICROPY_DIR}/py/mkrules.cmake)
+
+add_dependencies(BUILD_VERSION_HEADER zephyr_generated_headers)
+add_dependencies(${MICROPY_TARGET} zephyr_generated_headers)
 
 target_sources(app PRIVATE
     src/zephyr_start.c
     src/zephyr_getchar.c
+    src/usbd.c
 )
 
 target_link_libraries(app PRIVATE ${MICROPY_TARGET})

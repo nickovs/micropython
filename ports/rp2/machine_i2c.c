@@ -28,50 +28,12 @@
 #include "py/mphal.h"
 #include "py/mperrno.h"
 #include "extmod/modmachine.h"
+#include "machine_i2c.h"
 
 #include "hardware/i2c.h"
 
 #define DEFAULT_I2C_FREQ (400000)
 #define DEFAULT_I2C_TIMEOUT (50000)
-
-#ifdef MICROPY_HW_I2C_NO_DEFAULT_PINS
-
-// With no default I2C, need to require the pin args.
-#define MICROPY_HW_I2C0_SCL (0)
-#define MICROPY_HW_I2C0_SDA (0)
-#define MICROPY_HW_I2C1_SCL (0)
-#define MICROPY_HW_I2C1_SDA (0)
-#define MICROPY_I2C_PINS_ARG_OPTS MP_ARG_REQUIRED
-
-#else
-
-// Most boards do not require pin args.
-#define MICROPY_I2C_PINS_ARG_OPTS 0
-
-#ifndef MICROPY_HW_I2C0_SCL
-#if PICO_DEFAULT_I2C == 0
-#define MICROPY_HW_I2C0_SCL (PICO_DEFAULT_I2C_SCL_PIN)
-#define MICROPY_HW_I2C0_SDA (PICO_DEFAULT_I2C_SDA_PIN)
-#else
-#define MICROPY_HW_I2C0_SCL (9)
-#define MICROPY_HW_I2C0_SDA (8)
-#endif
-#endif
-
-#ifndef MICROPY_HW_I2C1_SCL
-#if PICO_DEFAULT_I2C == 1
-#define MICROPY_HW_I2C1_SCL (PICO_DEFAULT_I2C_SCL_PIN)
-#define MICROPY_HW_I2C1_SDA (PICO_DEFAULT_I2C_SDA_PIN)
-#else
-#define MICROPY_HW_I2C1_SCL (7)
-#define MICROPY_HW_I2C1_SDA (6)
-#endif
-#endif
-#endif
-
-// SDA/SCL on even/odd pins, I2C0/I2C1 on even/odd pairs of pins.
-#define IS_VALID_SCL(i2c, pin) (((pin) & 1) == 1 && (((pin) & 2) >> 1) == (i2c))
-#define IS_VALID_SDA(i2c, pin) (((pin) & 1) == 0 && (((pin) & 2) >> 1) == (i2c))
 
 typedef struct _machine_i2c_obj_t {
     mp_obj_base_t base;
@@ -100,7 +62,7 @@ mp_obj_t machine_i2c_make_new(const mp_obj_type_t *type, size_t n_args, size_t n
         #ifdef PICO_DEFAULT_I2C
         { MP_QSTR_id, MP_ARG_INT, {.u_int = PICO_DEFAULT_I2C} },
         #else
-        { MP_QSTR_id, MP_ARG_INT, {.u_int = -1} },
+        { MP_QSTR_id, MP_ARG_INT | MP_ARG_REQUIRED },
         #endif
         { MP_QSTR_freq, MP_ARG_INT, {.u_int = DEFAULT_I2C_FREQ} },
         { MP_QSTR_scl, MICROPY_I2C_PINS_ARG_OPTS | MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE} },

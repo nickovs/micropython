@@ -104,9 +104,13 @@ vpath %.cpp . $(TOP) $(USER_C_MODULES)
 $(BUILD)/%.o: %.cpp
 	$(call compile_cxx)
 
-$(BUILD)/%.pp: %.c
+$(BUILD)/%.pp: %.c FORCE
 	$(ECHO) "PreProcess $<"
 	$(Q)$(CPP) $(CFLAGS) -Wp,-C,-dD,-dI -o $@ $<
+
+.PHONY: $(BUILD)/%.sz
+$(BUILD)/%.sz: $(BUILD)/%.o
+	$(Q)$(SIZE) $<
 
 # Special case for compiling auto-generated source files.
 $(BUILD)/%.o: $(BUILD)/%.c
@@ -262,19 +266,14 @@ endif
 # If available, do blobless partial clones of submodules to save time and space.
 # A blobless partial clone lazily fetches data as needed, but has all the metadata available (tags, etc.).
 # Fallback to standard submodule update if blobless isn't available (earlier than 2.36.0)
+#
+# Note: This target has a CMake equivalent in py/mkrules.cmake
 submodules:
 	$(ECHO) "Updating submodules: $(GIT_SUBMODULES)"
 ifneq ($(GIT_SUBMODULES),)
 	$(Q)cd $(TOP) && git submodule sync $(GIT_SUBMODULES)
-	$(Q)cd $(TOP) && git submodule update --init --filter=blob:none $(GIT_SUBMODULES) || \
+	$(Q)cd $(TOP) && git submodule update --init --filter=blob:none $(GIT_SUBMODULES) 2>/dev/null || \
 	  git submodule update --init $(GIT_SUBMODULES)
-else
-ifeq ($(GIT_SUBMODULES_FAIL_IF_EMPTY),1)
-	# If you see this error, it may mean the internal step run by the port's build
-	# system to find git submodules has failed. Double-check dependencies are set correctly.
-	$(ECHO) "Internal build error: The submodule list should not be empty."
-	exit 1
-endif
 endif
 .PHONY: submodules
 

@@ -25,7 +25,7 @@ SEEK_END = 2
 # An mpy file with four constant objects: str, bytes, long-int, float.
 test_mpy = (
     # header
-    b"M\x06\x00\x1f"  # mpy file header
+    b"M\x06\x00\x1e"  # mpy file header, -msmall-int-bits=30
     b"\x06"  # n_qstr
     b"\x05"  # n_obj
     # qstrs
@@ -394,6 +394,7 @@ class TestMounted(TestBase):
     def setUp(self):
         self.orig_sys_path = list(sys.path)
         self.orig_cwd = os.getcwd()
+        sys.path = []
         vfs.mount(vfs.VfsRom(self.romfs), "/test_rom")
 
     def tearDown(self):
@@ -408,9 +409,11 @@ class TestMounted(TestBase):
 
     def test_chdir(self):
         os.chdir("/test_rom")
+        self.assertEqual(os.getcwd(), "/test_rom")
         self.assertEqual(os.listdir(), self.romfs_listdir)
 
         os.chdir("/test_rom/")
+        self.assertEqual(os.getcwd(), "/test_rom")
         self.assertEqual(os.listdir(), self.romfs_listdir)
 
         # chdir within the romfs is not implemented.
