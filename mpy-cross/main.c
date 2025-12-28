@@ -34,6 +34,7 @@
 #include "py/persistentcode.h"
 #include "py/runtime.h"
 #include "py/gc.h"
+#include "py/parsenum.h"
 #include "genhdr/mpversion.h"
 #ifdef _WIN32
 #include "ports/windows/fmode.h"
@@ -93,6 +94,13 @@ static int compile_and_save(const char *file, const char *output_file, const cha
         mp_parse_tree_t parse_tree = mp_parse(lex, MP_PARSE_FILE_INPUT);
         mp_compiled_module_t cm;
         cm.context = m_new_obj(mp_module_context_t);
+        cm.arch_flags = 0;
+        #if MICROPY_EMIT_NATIVE && MICROPY_EMIT_RV32
+        if (mp_dynamic_compiler.native_arch == MP_NATIVE_ARCH_RV32IMC && mp_dynamic_compiler.backend_options != NULL) {
+            cm.arch_flags = ((asm_rv32_backend_options_t *)mp_dynamic_compiler.backend_options)->allowed_extensions;
+        }
+        #endif
+
         mp_compile_to_raw_code(&parse_tree, source_name, false, &cm);
 
         if ((output_file != NULL && strcmp(output_file, "-") == 0) ||
@@ -137,8 +145,8 @@ static int usage(char **argv) {
         "-march=<arch> : set architecture for native emitter;\n"
         "                x86, x64, armv6, armv6m, armv7m, armv7em, armv7emsp,\n"
         "                armv7emdp, xtensa, xtensawin, rv32imc, rv64imc, host, debug\n"
-        "-march-flags=<flags> : set architecture-specific flags (OUTPUT FILE MAY NOT WORK ON ALL TARGETS!)\n"
-        "                       supported flags for rv32imc: zba\n"
+        "-march-flags=<flags> : set architecture-specific flags (can be either a dec/hex/bin value or a comma-separated flags string)\n"
+        "                       supported flags for rv32imc: zba, zcmp\n"
         "\n"
         "Implementation specific options:\n", argv[0]
         );
@@ -218,6 +226,66 @@ static char *backslash_to_forwardslash(char *path) {
     }
     return path;
 }
+
+// This will need to be reworked in case mpy-cross needs to set more bits than
+// what its small int representation allows to fit in there.
+static bool parse_integer(const char *value, mp_uint_t *integer) {
+    assert(value && "Attempting to parse a NULL string");
+    assert(integer && "Attempting to store into a NULL integer buffer");
+
+    size_t value_length = strlen(value);
+    int base = 10;
+    if (value_length > 2 && value[0] == '0') {
+        if ((value[1] | 0x20) == 'b') {
+            base = 2;
+        } else if ((value[1] | 0x20) == 'x') {
+            base = 16;
+        } else {
+            return false;
+        }
+    }
+
+    bool valid = false;
+    nlr_buf_t nlr;
+    if (nlr_push(&nlr) == 0) {
+        mp_obj_t parsed = mp_parse_num_integer(value, value_length, base, NULL);
+        if (mp_obj_is_small_int(parsed)) {
+            *integer = MP_OBJ_SMALL_INT_VALUE(parsed);
+            valid = true;
+        }
+        nlr_pop();
+    }
+
+    return valid;
+}
+
+#if MICROPY_EMIT_NATIVE && MICROPY_EMIT_RV32
+static bool parse_rv32_flags_string(const char *source, mp_uint_t *flags) {
+    assert(source && "Flag arguments string is NULL.");
+    assert(flags && "Collected flags pointer is NULL.");
+
+    const char *current = source;
+    const char *end = source + strlen(source);
+    mp_uint_t collected_flags = 0;
+    while (current < end) {
+        const char *separator = strchr(current, ',');
+        if (separator == NULL) {
+            separator = end;
+        }
+        ptrdiff_t length = separator - current;
+        if (length == (sizeof("zba") - 1) && memcmp(current, "zba", length) == 0) {
+            collected_flags |= RV32_EXT_ZBA;
+        } else if (length == (sizeof("zcmp") - 1) && memcmp(current, "zcmp", length) == 0) {
+            collected_flags |= RV32_EXT_ZCMP;
+        } else {
+            return false;
+        }
+        current = separator + 1;
+    }
+    *flags = collected_flags;
+    return collected_flags != 0;
+}
+#endif
 
 MP_NOINLINE int main_(int argc, char **argv) {
     pre_process_options(argc, argv);
@@ -371,9 +439,12 @@ MP_NOINLINE int main_(int argc, char **argv) {
         #if MICROPY_EMIT_NATIVE && MICROPY_EMIT_RV32
         if (mp_dynamic_compiler.native_arch == MP_NATIVE_ARCH_RV32IMC) {
             mp_dynamic_compiler.backend_options = (void *)&rv32_options;
-            if (strncmp(arch_flags, "zba", sizeof("zba") - 1) == 0) {
-                rv32_options.allowed_extensions |= RV32_EXT_ZBA;
-                processed = true;
+            mp_uint_t raw_flags = 0;
+            if (parse_integer(arch_flags, &raw_flags) || parse_rv32_flags_string(arch_flags, &raw_flags)) {
+                if ((raw_flags & ~((mp_uint_t)RV32_EXT_ALL)) == 0) {
+                    rv32_options.allowed_extensions = raw_flags;
+                    processed = true;
+                }
             }
         }
         #endif
@@ -381,10 +452,6 @@ MP_NOINLINE int main_(int argc, char **argv) {
             mp_printf(&mp_stderr_print, "unrecognised arch flags\n");
             exit(1);
         }
-        mp_printf(&mp_stderr_print,
-            "WARNING: Using architecture-specific flags may create a MPY file whose code won't run on all targets!\n"
-            "         Currently there are no checks in the module file loader for whether the chosen flags used to\n"
-            "         build the MPY file are compatible with the running target.\n\n");
     }
 
     #if MICROPY_EMIT_NATIVE

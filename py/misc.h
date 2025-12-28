@@ -411,11 +411,6 @@ static inline uint32_t mp_ctz(uint32_t x) {
     return _BitScanForward(&tz, x) ? tz : 0;
 }
 
-// Workaround for 'warning C4127: conditional expression is constant'.
-static inline bool mp_check(bool value) {
-    return value;
-}
-
 static inline uint32_t mp_popcount(uint32_t x) {
     return __popcnt(x);
 }
@@ -424,7 +419,6 @@ static inline uint32_t mp_popcount(uint32_t x) {
 #define mp_clzl(x) __builtin_clzl(x)
 #define mp_clzll(x) __builtin_clzll(x)
 #define mp_ctz(x) __builtin_ctz(x)
-#define mp_check(x) (x)
 #if __has_builtin(__builtin_popcount)
 #define mp_popcount(x) __builtin_popcount(x)
 #else
@@ -456,15 +450,15 @@ static inline uint32_t mp_clz_mpi(mp_int_t x) {
     }
     return zeroes;
     #else
-    MP_STATIC_ASSERT(sizeof(mp_int_t) == sizeof(long long)
-        || sizeof(mp_int_t) == sizeof(long));
-
-    // ugly, but should compile to single intrinsic unless O0 is set
-    if (mp_check(sizeof(mp_int_t) == sizeof(long))) {
-        return mp_clzl((unsigned long)x);
-    } else {
-        return mp_clzll((unsigned long long)x);
-    }
+    #if MP_INT_MAX == INT_MAX
+    return mp_clz((unsigned)x);
+    #elif MP_INT_MAX == LONG_MAX
+    return mp_clzl((unsigned long)x);
+    #elif MP_INT_MAX == LLONG_MAX
+    return mp_clzll((unsigned long long)x);
+    #else
+    #error Unexpected MP_INT_MAX value
+    #endif
     #endif
 }
 

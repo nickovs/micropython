@@ -77,6 +77,7 @@ LIBS = $(shell $(CC) $(CFLAGS) -print-libgcc-file-name)
 SRC_C += \
 	mcu/arm/errorhandler.c \
 	mcu/arm/startup.c \
+	mcu/arm/ticks.c \
 	shared/runtime/semihosting_arm.c \
 
 endif
@@ -109,6 +110,7 @@ LDFLAGS += -mabi=$(RV32_ABI) -march=$(RV32_ARCH) -Wl,-EL
 SRC_C += \
 	mcu/rv32/interrupts.c \
 	mcu/rv32/startup.c \
+	mcu/riscv/ticks.c \
 
 SRC_BOARD_O += mcu/rv32/entrypoint.o
 
@@ -142,6 +144,7 @@ LDFLAGS += -mabi=$(RV64_ABI) -march=$(RV64_ARCH) -Wl,-EL -mcmodel=medany
 SRC_C += \
 	mcu/rv64/interrupts.c \
 	mcu/rv64/startup.c \
+	mcu/riscv/ticks.c \
 
 SRC_BOARD_O += mcu/rv64/entrypoint.o
 
@@ -150,7 +153,8 @@ endif
 ################################################################################
 # Project specific settings and compiler/linker flags
 
-QEMU_SYSTEM = qemu-system-$(QEMU_ARCH)
+QEMU_BASE ?= qemu-system-
+QEMU_SYSTEM = $(QEMU_BASE)$(QEMU_ARCH)
 QEMU_ARGS += -machine $(QEMU_MACHINE) -nographic -monitor null -semihosting
 QEMU_ARGS += $(QEMU_EXTRA)
 
@@ -193,7 +197,7 @@ CFLAGS += $(SPECS_FRAGMENT)
 LDFLAGS += $(SPECS_FRAGMENT)
 endif
 
-RUN_TESTS_FULL_ARGS = -t execpty:"$(QEMU_SYSTEM) $(QEMU_ARGS) -serial pty -kernel ../ports/qemu/$<" --mpy-cross-flags='$(MPY_CROSS_FLAGS)' $(RUN_TESTS_ARGS)
+RUN_TESTS_FULL_ARGS = -t execpty:"$(QEMU_SYSTEM) $(QEMU_ARGS) -serial pty -kernel ../ports/qemu/$<" $(RUN_TESTS_ARGS)
 
 ################################################################################
 # Source files and libraries
