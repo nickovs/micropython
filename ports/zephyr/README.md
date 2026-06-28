@@ -5,8 +5,8 @@ This is a work-in-progress port of MicroPython to Zephyr RTOS
 (http://zephyrproject.org).
 
 This port tries to support all Zephyr versions supported upstream,
-i.e. currently v3.7 (LTS), v4.2 and the development branch. The CI is
-setup to use the latest version, i.e. v4.2.
+i.e. currently v3.7 (LTS), v4.4 and the development branch. The CI is
+setup to use the latest version, i.e. v4.4.
 
 All boards supported by Zephyr (with standard level of features
 support, like UART console) should work with MicroPython (but not all
@@ -35,23 +35,23 @@ Over time, bindings for various Zephyr subsystems may be added.
 Building
 --------
 
-Follow to Zephyr web site for Getting Started instruction of installing
-Zephyr SDK, getting Zephyr source code, and setting up development
-environment. (Direct link:
-https://docs.zephyrproject.org/latest/getting_started/index.html).
+Follow the Zephyr website's
+[Getting Started Guide](https://docs.zephyrproject.org/latest/develop/getting_started/index.html)
+for installing the Zephyr SDK, getting Zephyr source code, and setting
+up a development environment.
 You may want to build Zephyr's own sample applications to make sure your
 setup is correct.
 
 If you already have Zephyr installed but are having issues building the
 MicroPython port then try installing the correct version of Zephyr via:
 
-    $ west init zephyrproject -m https://github.com/zephyrproject-rtos/zephyr --mr v4.2.0
+    $ west init zephyrproject -m https://github.com/zephyrproject-rtos/zephyr --mr v4.4.0
 
 Alternatively, you don't have to redo the Zephyr installation to just
 switch from master to a tagged release, you can instead do:
 
     $ cd zephyrproject/zephyr
-    $ git checkout v4.2.0
+    $ git checkout v4.4.0
     $ west update
 
 With Zephyr installed you may then need to configure your environment,
@@ -211,8 +211,8 @@ run the following after you built an image with the previous command:
 File Systems
 ------------
 
-The Zephyr Micropython port provides 2 options for handling filesystems on the device:
-The first is the Micropython filesystem management, which uses Micropython's filesystem code and
+The Zephyr MicroPython port provides 2 options for handling filesystems on the device:
+The first is the MicroPython filesystem management, which uses MicroPython's filesystem code and
 relies on zephyr's FlashArea API, this is enabled by default when 
 `CONFIG_FLASH` and `CONFIG_FLASH_MAP` are turned on.
 The second option is using Zephyr's Filesystem management:
@@ -241,13 +241,13 @@ Then, a fstab must be added to the dts overlay, for example:
 		};
 	};
 	
-It is then possible to use the FS like a normal Micropython filesystem:
+It is then possible to use the FS like a normal MicroPython filesystem:
 
     import vfs, zephyr
     zfs = zephyr.FileSystem(zephyr.FileSystem.fstab()[0])
     vfs.mount(zfs, "/zephyr")
 
-You may disable Micropython's File system code to save space:
+You may disable MicroPython's File system code to save space:
     
     CONFIG_MICROPY_VFS_FAT=n
     CONFIG_MICROPY_VFS_LFS1=n

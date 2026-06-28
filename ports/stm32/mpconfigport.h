@@ -81,6 +81,7 @@
 #define MICROPY_SCHEDULER_STATIC_NODES (1)
 #define MICROPY_SCHEDULER_DEPTH     (8)
 #define MICROPY_VFS                 (1)
+#define MICROPY_VFS_BLOCKDEV_NATIVE (1)
 #ifndef MICROPY_VFS_ROM
 #define MICROPY_VFS_ROM (MICROPY_HW_ROMFS_ENABLE_INTERNAL_FLASH || MICROPY_HW_ROMFS_ENABLE_EXTERNAL_QSPI || MICROPY_HW_ROMFS_ENABLE_EXTERNAL_XSPI)
 #endif
@@ -108,8 +109,6 @@
 #define MICROPY_PY_TIME_GMTIME_LOCALTIME_MKTIME (1)
 #define MICROPY_PY_TIME_TIME_TIME_NS (1)
 #define MICROPY_PY_TIME_INCLUDEFILE "ports/stm32/modtime.c"
-#define MICROPY_PY_LWIP_PPP         (MICROPY_PY_NETWORK_PPP_LWIP)
-#define MICROPY_PY_LWIP_SOCK_RAW    (MICROPY_PY_LWIP)
 #ifndef MICROPY_PY_MACHINE
 #define MICROPY_PY_MACHINE          (1)
 #define MICROPY_PY_MACHINE_INCLUDEFILE "ports/stm32/modmachine.c"
@@ -122,6 +121,14 @@
 #ifndef MICROPY_PY_MACHINE_BITSTREAM
 #define MICROPY_PY_MACHINE_BITSTREAM (1)
 #endif
+#ifndef MICROPY_PY_MACHINE_CAN
+#if defined(MICROPY_HW_CAN1_TX) || defined(MICROPY_HW_CAN2_TX)
+#define MICROPY_PY_MACHINE_CAN (1)
+#else
+#define MICROPY_PY_MACHINE_CAN (0)
+#endif
+#endif
+#define MICROPY_PY_MACHINE_CAN_INCLUDEFILE "ports/stm32/machine_can.c"
 #define MICROPY_PY_MACHINE_DHT_READINTO (1)
 #define MICROPY_PY_MACHINE_PULSE    (1)
 #define MICROPY_PY_MACHINE_PIN_MAKE_NEW mp_pin_make_new
@@ -135,6 +142,9 @@
 #define MICROPY_PY_MACHINE_I2S_CONSTANT_RX (I2S_MODE_MASTER_RX)
 #define MICROPY_PY_MACHINE_I2S_CONSTANT_TX (I2S_MODE_MASTER_TX)
 #define MICROPY_PY_MACHINE_I2S_RING_BUF (1)
+#define MICROPY_PY_MACHINE_PWM      (1)
+#define MICROPY_PY_MACHINE_PWM_INCLUDEFILE "ports/stm32/machine_pwm.c"
+#define MICROPY_PY_MACHINE_SDCARD   (MICROPY_HW_ENABLE_SDCARD)
 #define MICROPY_PY_MACHINE_SPI      (1)
 #define MICROPY_PY_MACHINE_SPI_MSB  (SPI_FIRSTBIT_MSB)
 #define MICROPY_PY_MACHINE_SPI_LSB  (SPI_FIRSTBIT_LSB)
@@ -207,6 +217,17 @@ extern const struct _mp_obj_type_t network_lan_type;
 #define MICROPY_HW_NIC_ETH
 #endif
 
+// Provide a port-level default of MICROPY_HW_NUM_CAN based on pin definitions
+#ifndef MICROPY_HW_NUM_CAN
+#if defined(MICROPY_HW_CAN3_TX)
+#define MICROPY_HW_NUM_CAN 3
+#elif defined(MICROPY_HW_CAN2_TX)
+#define MICROPY_HW_NUM_CAN 2
+#elif defined(MICROPY_HW_CAN1_TX)
+#define MICROPY_HW_NUM_CAN 1
+#endif
+#endif // MICROPY_HW_NUM_CAN
+
 // extra constants
 #define MICROPY_PORT_CONSTANTS \
     MACHINE_BUILTIN_MODULE_CONSTANTS \
@@ -230,32 +251,6 @@ extern const struct _mp_obj_type_t network_lan_type;
 #define MP_SSIZE_MAX (0x7fffffff)
 
 typedef long mp_off_t;
-
-#if MICROPY_PY_THREAD
-#define MICROPY_EVENT_POLL_HOOK \
-    do { \
-        extern void mp_handle_pending(bool); \
-        mp_handle_pending(true); \
-        if (pyb_thread_enabled) { \
-            MP_THREAD_GIL_EXIT(); \
-            pyb_thread_yield(); \
-            MP_THREAD_GIL_ENTER(); \
-        } else { \
-            __WFI(); \
-        } \
-    } while (0);
-
-#define MICROPY_THREAD_YIELD() pyb_thread_yield()
-#else
-#define MICROPY_EVENT_POLL_HOOK \
-    do { \
-        extern void mp_handle_pending(bool); \
-        mp_handle_pending(true); \
-        __WFI(); \
-    } while (0);
-
-#define MICROPY_THREAD_YIELD()
-#endif
 
 // Configuration for shared/runtime/softtimer.c.
 #define MICROPY_SOFT_TIMER_TICKS_MS uwTick

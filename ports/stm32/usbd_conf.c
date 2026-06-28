@@ -32,7 +32,9 @@
 #include "usbd_core.h"
 #include "py/obj.h"
 #include "py/mphal.h"
+#if !BUILDING_MBOOT
 #include "shared/tinyusb/mp_usbd.h"
+#endif
 #include "irq.h"
 #include "usb.h"
 
@@ -61,6 +63,30 @@ PCD_HandleTypeDef pcd_hs_handle;
 #if defined(STM32N6)
 #define USB_OTG_HS USB1_OTG_HS
 #define OTG_HS_IRQn USB1_OTG_HS_IRQn
+#endif
+
+// Configure VBUS sensing for TinyUSB on STM32F4/F7. The DWC2 PHY init only
+// sets the PWRDWN bit but doesn't configure VBUS sensing in the GCCFG register.
+#if MICROPY_HW_TINYUSB_STACK && (defined(STM32F4) || defined(STM32F7))
+static inline void mp_usbd_configure_vbus_sensing(USB_OTG_GlobalTypeDef *USBx) {
+    #if defined(USB_OTG_GCCFG_VBDEN)
+    // Newer STM32F4/F7 with VBDEN register bit.
+    #if defined(MICROPY_HW_USB_VBUS_DETECT_PIN)
+    USBx->GCCFG |= USB_OTG_GCCFG_VBDEN;
+    #else
+    USBx->GCCFG &= ~USB_OTG_GCCFG_VBDEN;
+    #endif
+    #else
+    // Older STM32F4 with separate VBUSASEN/VBUSBSEN/NOVBUSSENS register bits.
+    #if defined(MICROPY_HW_USB_VBUS_DETECT_PIN)
+    USBx->GCCFG &= ~USB_OTG_GCCFG_NOVBUSSENS;
+    USBx->GCCFG |= USB_OTG_GCCFG_VBUSBSEN;
+    #else
+    USBx->GCCFG |= USB_OTG_GCCFG_NOVBUSSENS;
+    USBx->GCCFG &= ~(USB_OTG_GCCFG_VBUSBSEN | USB_OTG_GCCFG_VBUSASEN);
+    #endif
+    #endif
+}
 #endif
 
 #if MICROPY_HW_USB_FS
@@ -98,7 +124,7 @@ static void mp_usbd_ll_init_fs(void) {
         const uint32_t otg_alt = GPIO_AF0_USB;
         #elif defined(STM32L432xx) || defined(STM32L452xx)
         const uint32_t otg_alt = GPIO_AF10_USB_FS;
-        #elif defined(STM32H5) || defined(STM32WB)
+        #elif defined(STM32H5) || defined(STM32U5) || defined(STM32WB)
         const uint32_t otg_alt = GPIO_AF10_USB;
         #else
         const uint32_t otg_alt = GPIO_AF10_OTG_FS;
@@ -139,7 +165,7 @@ static void mp_usbd_ll_init_fs(void) {
         // Enable VDDUSB
         #if defined(STM32H5) || defined(STM32WB)
         HAL_PWREx_EnableVddUSB();
-        #elif defined(STM32L4)
+        #elif defined(STM32L4) || defined(STM32U5)
         if (__HAL_RCC_PWR_IS_CLK_DISABLED()) {
             __HAL_RCC_PWR_CLK_ENABLE();
             HAL_PWREx_EnableVddUSB();
@@ -170,20 +196,8 @@ static void mp_usbd_ll_init_fs(void) {
         HAL_NVIC_EnableIRQ(OTG_FS_IRQn);
         #endif
 
-        #if MICROPY_HW_TINYUSB_STACK
-        // Configure VBUS sensing for TinyUSB on STM32F4/F7 which have separate GCCFG register
-        // The DWC2 PHY init only sets PWRDWN bit, but doesn't configure VBUS sensing
-        #if defined(STM32F4) || defined(STM32F7)
-        #if defined(MICROPY_HW_USB_VBUS_DETECT_PIN)
-        // Enable VBUS sensing in "B device" mode (using PA9)
-        USB_OTG_FS->GCCFG &= ~USB_OTG_GCCFG_NOVBUSSENS;
-        USB_OTG_FS->GCCFG |= USB_OTG_GCCFG_VBUSBSEN;
-        #else
-        // Force VBUS valid (no VBUS detect pin configured)
-        USB_OTG_FS->GCCFG |= USB_OTG_GCCFG_NOVBUSSENS;
-        USB_OTG_FS->GCCFG &= ~(USB_OTG_GCCFG_VBUSBSEN | USB_OTG_GCCFG_VBUSASEN);
-        #endif
-        #endif
+        #if MICROPY_HW_TINYUSB_STACK && (defined(STM32F4) || defined(STM32F7))
+        mp_usbd_configure_vbus_sensing(USB_OTG_FS);
         #endif
     }
 }
@@ -279,8 +293,6 @@ static void mp_usbd_ll_init_hs(void) {
 
         LL_AHB5_GRP1_EnableClock(LL_AHB5_GRP1_PERIPH_OTG1);
         LL_AHB5_GRP1_EnableClock(LL_AHB5_GRP1_PERIPH_OTGPHY1);
-        LL_AHB5_GRP1_EnableClockLowPower(LL_AHB5_GRP1_PERIPH_OTG1);
-        LL_AHB5_GRP1_EnableClockLowPower(LL_AHB5_GRP1_PERIPH_OTGPHY1);
 
         // Select 24MHz clock.
         MODIFY_REG(USB1_HS_PHYC->USBPHYC_CR, USB_USBPHYC_CR_FSEL, 2 << USB_USBPHYC_CR_FSEL_Pos);
@@ -304,6 +316,10 @@ static void mp_usbd_ll_init_hs(void) {
 
         __HAL_RCC_USB_OTG_HS_CLK_ENABLE();
 
+        #endif
+
+        #if MICROPY_HW_TINYUSB_STACK && (defined(STM32F4) || defined(STM32F7))
+        mp_usbd_configure_vbus_sensing(USB_OTG_HS);
         #endif
 
         #else // !MICROPY_HW_USB_HS_IN_FS

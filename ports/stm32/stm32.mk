@@ -43,7 +43,7 @@ ifneq ($(BUILDING_MBOOT),1)
 # Select hardware floating-point support.
 SUPPORTS_HARDWARE_FP_SINGLE = 0
 SUPPORTS_HARDWARE_FP_DOUBLE = 0
-ifeq ($(CMSIS_MCU),$(filter $(CMSIS_MCU),STM32F765xx STM32F767xx STM32F769xx STM32H743xx STM32H747xx STM32H750xx STM32H7A3xx STM32H7A3xxQ STM32H7B3xx STM32H7B3xxQ STM32N657xx))
+ifeq ($(CMSIS_MCU),$(filter $(CMSIS_MCU),STM32F765xx STM32F767xx STM32F769xx STM32H743xx STM32H747xx STM32H750xx STM32H753xx STM32H7A3xx STM32H7A3xxQ STM32H7B3xx STM32H7B3xxQ STM32N657xx))
 CFLAGS_CORTEX_M += -mfpu=fpv5-d16 -mfloat-abi=hard -mfp16-format=ieee
 SUPPORTS_HARDWARE_FP_SINGLE = 1
 SUPPORTS_HARDWARE_FP_DOUBLE = 1
@@ -85,6 +85,10 @@ MPY_CROSS_MCU_ARCH_n6 = armv7m # really armv8m
 MPY_CROSS_MCU_ARCH_u5 = armv7m
 MPY_CROSS_MCU_ARCH_wb = armv7m
 MPY_CROSS_MCU_ARCH_wl = armv7m
+
+# Select the correct flags for the given MCU series.
+CFLAGS_MCU = $(CFLAGS_MCU_$(MCU_SERIES))
+MPY_CROSS_MCU_ARCH = $(MPY_CROSS_MCU_ARCH_$(MCU_SERIES))
 
 # gcc up to 14.2.0 have a known loop-optimisation bug:
 # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=116799

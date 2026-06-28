@@ -142,7 +142,7 @@ static int execute_from_lexer(int source_kind, const void *source, mp_parse_inpu
 
         #if defined(MICROPY_UNIX_COVERAGE)
         // allow to print the parse tree in the coverage build
-        if (mp_verbose_flag >= 3) {
+        if (MP_STATE_VM(mp_verbose_flag) >= 3) {
             printf("----------------\n");
             mp_parse_node_print(&mp_plat_print, parse_tree.root, 0);
             printf("----------------\n");
@@ -157,14 +157,14 @@ static int execute_from_lexer(int source_kind, const void *source, mp_parse_inpu
         }
 
         mp_hal_set_interrupt_char(-1);
-        mp_handle_pending(true);
+        mp_handle_pending(MP_HANDLE_PENDING_CALLBACKS_AND_EXCEPTIONS);
         nlr_pop();
         return 0;
 
     } else {
         // uncaught exception
         mp_hal_set_interrupt_char(-1);
-        mp_handle_pending(false);
+        mp_handle_pending(MP_HANDLE_PENDING_CALLBACKS_AND_CLEAR_EXCEPTIONS);
         return handle_uncaught_exception(nlr.ret_val);
     }
 }
@@ -631,12 +631,12 @@ MP_NOINLINE int main_(int argc, char **argv) {
                 if (nlr_push(&nlr) == 0) {
                     mod = mp_builtin___import__(MP_ARRAY_SIZE(import_args), import_args);
                     mp_hal_set_interrupt_char(-1);
-                    mp_handle_pending(true);
+                    mp_handle_pending(MP_HANDLE_PENDING_CALLBACKS_AND_EXCEPTIONS);
                     nlr_pop();
                 } else {
                     // uncaught exception
                     mp_hal_set_interrupt_char(-1);
-                    mp_handle_pending(false);
+                    mp_handle_pending(MP_HANDLE_PENDING_CALLBACKS_AND_CLEAR_EXCEPTIONS);
                     ret = handle_uncaught_exception(nlr.ret_val) & 0xff;
                     break;
                 }
@@ -661,7 +661,7 @@ MP_NOINLINE int main_(int argc, char **argv) {
                 a += 1;
             #if MICROPY_DEBUG_PRINTERS
             } else if (strcmp(argv[a], "-v") == 0) {
-                mp_verbose_flag++;
+                MP_STATE_VM(mp_verbose_flag)++;
             #endif
             } else if (strncmp(argv[a], "-O", 2) == 0) {
                 if (unichar_isdigit(argv[a][2])) {
@@ -720,7 +720,7 @@ MP_NOINLINE int main_(int argc, char **argv) {
     #endif
 
     #if MICROPY_PY_MICROPYTHON_MEM_INFO
-    if (mp_verbose_flag) {
+    if (MP_STATE_VM(mp_verbose_flag)) {
         mp_micropython_mem_info(0, NULL);
     }
     #endif

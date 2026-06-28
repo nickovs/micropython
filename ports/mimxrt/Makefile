@@ -20,7 +20,7 @@ endif
 BUILD ?= build-$(BOARD)
 PORT ?= /dev/ttyACM0
 CROSS_COMPILE ?= arm-none-eabi-
-GIT_SUBMODULES += lib/tinyusb lib/nxp_driver
+GIT_SUBMODULES += lib/CMSIS_6 lib/tinyusb lib/nxp_driver
 UF2CONV ?= $(TOP)/tools/uf2conv.py
 
 # MicroPython feature configurations
@@ -56,7 +56,7 @@ MCUX_SDK_DIR = lib/nxp_driver/sdk
 MCU_DIR = $(MCUX_SDK_DIR)/devices/$(MCU_SERIES)
 
 # Select linker scripts based on MCU_SERIES
-LD_FILES = boards/$(MCU_SERIES).ld boards/common.ld
+LD_FILES ?= boards/$(MCU_SERIES).ld boards/common.ld
 
 # Parameter configurations for generation
 AF_FILE = boards/$(MCU_SERIES)_af.csv
@@ -73,7 +73,7 @@ GEN_PINS_SRC = $(BUILD)/pins_gen.c
 INC += -I$(BOARD_DIR)
 INC += -I$(BUILD)
 INC += -I$(TOP)
-INC += -I$(TOP)/lib/cmsis/inc
+INC += -I$(TOP)/lib/CMSIS_6/CMSIS/Core/Include
 INC += -I$(TOP)/lib/oofatfs
 INC += -I$(TOP)/lib/tinyusb/hw
 INC += -I$(TOP)/lib/tinyusb/hw/bsp/teensy_40
@@ -93,19 +93,11 @@ endif
 # =============================================================================
 
 # TinyUSB Stack source
-SRC_TINYUSB_C += \
-	lib/tinyusb/src/class/cdc/cdc_device.c \
-	lib/tinyusb/src/class/dfu/dfu_rt_device.c \
-	lib/tinyusb/src/class/hid/hid_device.c \
-	lib/tinyusb/src/class/midi/midi_device.c \
-	lib/tinyusb/src/class/msc/msc_device.c \
-	lib/tinyusb/src/class/usbtmc/usbtmc_device.c \
-	lib/tinyusb/src/class/vendor/vendor_device.c \
-	lib/tinyusb/src/common/tusb_fifo.c \
-	lib/tinyusb/src/device/usbd.c \
-	lib/tinyusb/src/device/usbd_control.c \
-	lib/tinyusb/src/portable/chipidea/ci_hs/dcd_ci_hs.c \
-	lib/tinyusb/src/tusb.c
+-include $(TOP)/lib/tinyusb/src/tinyusb.mk
+TINYUSB_SRC_C := $(sort $(addprefix lib/tinyusb/, \
+	$(TINYUSB_SRC_C) \
+	src/portable/chipidea/ci_hs/dcd_ci_hs.c \
+	))
 
 # All settings for Ethernet support are controller by the value of MICROPY_PY_LWIP
 ifeq ($(MICROPY_PY_LWIP),1)
@@ -113,6 +105,7 @@ SRC_ETH_C += \
 	$(MCUX_SDK_DIR)/drivers/enet/fsl_enet.c \
 	hal/phy/device/phydp83825/fsl_phydp83825.c \
 	hal/phy/device/phydp83848/fsl_phydp83848.c \
+	hal/phy/device/phydp83867/fsl_phydp83867.c \
 	hal/phy/device/phyksz8081/fsl_phyksz8081.c \
 	hal/phy/device/phylan8720/fsl_phylan8720.c \
 	hal/phy/device/phyrtl8211f/fsl_phyrtl8211f.c \
@@ -136,6 +129,7 @@ SRC_HAL_IMX_C += \
 	$(MCUX_SDK_DIR)/drivers/lpi2c/fsl_lpi2c.c \
 	$(MCUX_SDK_DIR)/drivers/lpspi/fsl_lpspi.c \
 	$(MCUX_SDK_DIR)/drivers/lpspi/fsl_lpspi_edma.c \
+	$(MCUX_SDK_DIR)/drivers/lpuart/fsl_lpuart.c \
 	$(MCUX_SDK_DIR)/drivers/pit/fsl_pit.c \
 	$(MCUX_SDK_DIR)/drivers/pwm/fsl_pwm.c \
 	$(MCUX_SDK_DIR)/drivers/sai/fsl_sai.c \
@@ -150,6 +144,10 @@ SRC_HAL_IMX_C += hal/fsl_flexspi_nor_boot.c
 else
 SRC_HAL_IMX_C += $(MCU_DIR)/xip/fsl_flexspi_nor_boot.c
 endif
+
+# UART IRQ wrapper for UART.IRQ_RXIDLE support (see machine_uart.c for implementation details)
+# Double wrapping is required because SDK stores function pointers in s_lpuartIsr[] dispatch table
+LDFLAGS += --wrap=LPUART_TransferCreateHandle --wrap=LPUART_TransferHandleIRQ
 
 INC_HAL_IMX += \
 	-I$(TOP)/$(MCU_DIR) \
@@ -179,14 +177,25 @@ endif
 ifeq ($(MCU_SERIES),$(filter $(MCU_SERIES), MIMXRT1021 MIMXRT1052 MIMXRT1062 MIMXRT1064 MIMXRT1176))
 SRC_HAL_IMX_C += $(MCUX_SDK_DIR)/drivers/usdhc/fsl_usdhc.c
 INC_HAL_IMX += -I$(TOP)/$(MCUX_SDK_DIR)/drivers/usdhc
+
+SRC_HAL_IMX_C += $(MCUX_SDK_DIR)/drivers/flexcan/fsl_flexcan.c
+INC_HAL_IMX += -I$(TOP)/$(MCUX_SDK_DIR)/drivers/flexcan
+MICROPY_PY_MACHINE_CAN = 1
 endif
 
 ifeq ($(MCU_SERIES),$(filter $(MCU_SERIES), MIMXRT1015 MIMXRT1021 MIMXRT1052 MIMXRT1062 MIMXRT1064 MIMXRT1176))
 SRC_HAL_IMX_C += \
 	$(MCUX_SDK_DIR)/drivers/qtmr_1/fsl_qtmr.c \
+	$(MCUX_SDK_DIR)/drivers/enc/fsl_enc.c \
+	$(MCUX_SDK_DIR)/drivers/xbara/fsl_xbara.c \
 	$(MCU_DIR)/drivers/fsl_romapi.c
 
-INC_HAL_IMX += -I$(TOP)/$(MCUX_SDK_DIR)/drivers/qtmr_1
+INC_HAL_IMX += \
+	-I$(TOP)/$(MCUX_SDK_DIR)/drivers/enc \
+	-I$(TOP)/$(MCUX_SDK_DIR)/drivers/xbara \
+	-I$(TOP)/$(MCUX_SDK_DIR)/drivers/qtmr_1
+
+CFLAGS += -DMICROPY_PY_MACHINE_QECNT=1
 endif
 
 # If not empty, then it is 10xx.
@@ -243,7 +252,6 @@ SRC_C += \
 	eth.c \
 	fatfs_port.c \
 	flash.c \
-	hal/fsl_lpuart.c \
 	hal/pwm_backport.c \
 	help.c \
 	led.c \
@@ -251,6 +259,7 @@ SRC_C += \
 	machine_i2c.c \
 	machine_led.c \
 	machine_pin.c \
+	machine_encoder.c \
 	machine_rtc.c \
 	machine_sdcard.c \
 	machine_spi.c \
@@ -265,6 +274,7 @@ SRC_C += \
 	network_lan.c \
 	pendsv.c \
 	pin.c \
+	psram.c \
 	sdcard.c \
 	sdio.c \
 	systick.c \
@@ -309,6 +319,11 @@ endif
 # Set a flag if the UF2 bootloader is used
 ifeq ($(USE_UF2_BOOTLOADER),1)
 	CFLAGS += -DMICROPY_MACHINE_UF2_BOOTLOADER=1
+endif
+
+# Set the default size of the VfsRom file system. Can be changed at board level
+ifeq ($(MICROPY_HW_ROMFS_BYTES),)
+	MICROPY_HW_ROMFS_BYTES ?= 0x40000
 endif
 
 # Add sources for respective board flash type
@@ -377,7 +392,7 @@ hal/resethandler_MIMXRT10xx.S: $(GEN_FLEXRAM_CONFIG_SRC)
 # =============================================================================
 
 # List of sources for qstr extraction
-SRC_QSTR += $(SRC_C) $(SHARED_SRC_C) $(GEN_PINS_SRC)
+SRC_QSTR += $(SRC_C) $(SHARED_SRC_C) $(SRC_CXX) $(GEN_PINS_SRC)
 
 # =============================================================================
 # Compiler Flags
@@ -395,6 +410,7 @@ endif
 # Set default values for optional variables
 MICROPY_HW_SDRAM_AVAIL ?= 0
 MICROPY_HW_SDRAM_SIZE ?= 0
+MICROPY_PY_MACHINE_CAN ?= 0
 
 # Configure default compiler flags
 CFLAGS += \
@@ -415,6 +431,7 @@ CFLAGS += \
 	-DMICROPY_HW_FLASH_SIZE=$(MICROPY_HW_FLASH_SIZE) \
 	-DMICROPY_HW_SDRAM_AVAIL=$(MICROPY_HW_SDRAM_AVAIL) \
 	-DMICROPY_HW_SDRAM_SIZE=$(MICROPY_HW_SDRAM_SIZE) \
+	-DMICROPY_PY_MACHINE_CAN=$(MICROPY_PY_MACHINE_CAN) \
 	-DXIP_BOOT_HEADER_ENABLE=1 \
 	-DXIP_EXTERNAL_FLASH=1 \
 	-fdata-sections \
@@ -422,7 +439,6 @@ CFLAGS += \
 	-mcpu=cortex-m7 \
 	-mthumb \
 	-mtune=cortex-m7 \
-	-nostdlib \
 	-std=c99 \
 	-Wall \
 	-Wdouble-promotion \
@@ -486,17 +502,20 @@ MPY_CROSS_FLAGS += -march=armv7m
 # =============================================================================
 
 LDFLAGS += \
+	-nostdlib \
 	--cref \
 	--gc-sections \
 	--print-memory-usage \
-	-Map=$@.map
+	-Map=$@.map \
+    --wrap=LPUART_TransferCreateHandle --wrap=LPUART_TransferHandleIRQ
 
 # LDDEFINES are used for link time adaptation of linker scripts, utilizing
 #	the C preprocessor. Therefore keep LDDEFINES separated from LDFLAGS!
 
-LDDEFINES = \
+LDDEFINES += \
 	-DMICROPY_HW_FLASH_BASE=$(MICROPY_HW_FLASH_BASE) \
-	-DMICROPY_HW_FLASH_SIZE=$(MICROPY_HW_FLASH_SIZE)
+	-DMICROPY_HW_FLASH_SIZE=$(MICROPY_HW_FLASH_SIZE) \
+	-DMICROPY_HW_ROMFS_BYTES=$(MICROPY_HW_ROMFS_BYTES)
 
 ifdef MICROPY_HW_FLASH_RESERVED
 LDDEFINES += -DMICROPY_HW_FLASH_RESERVED=$(MICROPY_HW_FLASH_RESERVED)
@@ -517,11 +536,12 @@ LIBS = $(shell $(CC) $(CFLAGS) -print-libgcc-file-name)
 OBJ += $(PY_O)
 OBJ += $(addprefix $(BUILD)/, $(LIBM_SRC_C:.c=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_C:.c=.o))
+OBJ += $(addprefix $(BUILD)/, $(SRC_CXX:.cpp=.o))
 OBJ += $(addprefix $(BUILD)/, $(SHARED_SRC_C:.c=.o))
 OBJ += $(addprefix $(BUILD)/, $(DRIVERS_SRC_C:.c=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_S:.s=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_SS:.S=.o))
-OBJ += $(addprefix $(BUILD)/, $(SRC_TINYUSB_C:.c=.o))
+OBJ += $(addprefix $(BUILD)/, $(TINYUSB_SRC_C:.c=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_HAL_C:.c=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_HAL_IMX_C:.c=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_ETH_C:.c=.o))
@@ -573,7 +593,7 @@ $(HEADER_BUILD)/qstrdefs.generated.h: $(BOARD_DIR)/mpconfigboard.h
 $(GEN_FLEXRAM_CONFIG_SRC): $(HEADER_BUILD)
 	$(ECHO) "Create $@"
 	$(Q)$(PYTHON) $(MAKE_FLEXRAM_LD) -d $(TOP)/$(MCU_DIR)/$(MCU_SERIES)$(MCU_CORE).h \
-		-f $(TOP)/$(MCU_DIR)/$(MCU_SERIES)$(MCU_CORE)_features.h -l boards/$(MCU_SERIES).ld -c $(MCU_SERIES) > $@
+		-f $(TOP)/$(MCU_DIR)/$(MCU_SERIES)$(MCU_CORE)_features.h $(addprefix -l,$(LD_FILES)) -c $(MCU_SERIES) > $@
 
 # Use a pattern rule here so that make will only call make-pins.py once to make
 # both pins_gen.c and pins.h

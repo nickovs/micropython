@@ -87,9 +87,7 @@
 // MicroPython emitters
 #define MICROPY_PERSISTENT_CODE_LOAD            (1)
 #define MICROPY_EMIT_THUMB                      (1)
-#define MICROPY_EMIT_THUMB_ARMV7M               (1)
 #define MICROPY_EMIT_INLINE_THUMB               (1)
-#define MICROPY_EMIT_INLINE_THUMB_FLOAT         (1)
 
 // Optimisations
 #define MICROPY_OPT_COMPUTED_GOTO               (1)
@@ -113,7 +111,6 @@
 
 // Extended modules
 #define MICROPY_EPOCH_IS_1970                   (1)
-#define MICROPY_PY_OS_INCLUDEFILE               "ports/alif/modos.c"
 #define MICROPY_PY_OS_DUPTERM                   (1)
 #define MICROPY_PY_OS_SEP                       (1)
 #define MICROPY_PY_OS_SYNC                      (1)
@@ -133,6 +130,8 @@
 #define MICROPY_PY_MACHINE_ADC_INCLUDEFILE      "ports/alif/machine_adc.c"
 #define MICROPY_PY_MACHINE_DHT_READINTO         (1)
 #define MICROPY_PY_MACHINE_PULSE                (1)
+#define MICROPY_PY_MACHINE_PWM                  (1)
+#define MICROPY_PY_MACHINE_PWM_INCLUDEFILE      "ports/alif/machine_pwm.c"
 #define MICROPY_PY_MACHINE_I2C                  (MICROPY_HW_ENABLE_HW_I2C)
 #define MICROPY_PY_MACHINE_I2C_TRANSFER_WRITE1  (1)
 #ifndef MICROPY_PY_MACHINE_I2C_TARGET

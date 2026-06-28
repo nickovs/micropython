@@ -35,13 +35,20 @@ uint32_t trng_random_u32(void);
 // Config level
 #define MICROPY_CONFIG_ROM_LEVEL (MICROPY_CONFIG_ROM_LEVEL_FULL_FEATURES)
 
+#ifndef MICROPY_HW_ENABLE_PSRAM
+#define MICROPY_HW_ENABLE_PSRAM (0)
+#endif
+
 // Memory allocation policies
-#if MICROPY_HW_SDRAM_AVAIL
+#if MICROPY_HW_SDRAM_AVAIL || MICROPY_HW_ENABLE_PSRAM
 #define MICROPY_GC_STACK_ENTRY_TYPE         uint32_t
 #else
 #define MICROPY_GC_STACK_ENTRY_TYPE         uint16_t
 #endif
 #define MICROPY_ALLOC_PATH_MAX              (256)
+#ifndef MICROPY_GC_SPLIT_HEAP
+#define MICROPY_GC_SPLIT_HEAP               MICROPY_HW_ENABLE_PSRAM
+#endif
 
 // MicroPython emitters
 #define MICROPY_PERSISTENT_CODE_LOAD        (1)
@@ -49,6 +56,8 @@ uint32_t trng_random_u32(void);
 #define MICROPY_EMIT_INLINE_THUMB           (1)
 
 // Optimisations
+
+// Compiler configuration
 
 // Python internal features
 #define MICROPY_TRACKED_ALLOC               (MICROPY_SSL_MBEDTLS)
@@ -60,6 +69,9 @@ uint32_t trng_random_u32(void);
 #define MICROPY_SCHEDULER_DEPTH             (8)
 #define MICROPY_SCHEDULER_STATIC_NODES      (1)
 #define MICROPY_VFS                         (1)
+#ifndef MICROPY_VFS_ROM
+#define MICROPY_VFS_ROM                     (1)
+#endif
 
 // Control over Python builtins
 #define MICROPY_PY_BUILTINS_HELP_TEXT       mimxrt_help_text
@@ -93,6 +105,11 @@ uint32_t trng_random_u32(void);
 #define MICROPY_PY_MACHINE_PWM              (1)
 #define MICROPY_PY_MACHINE_PWM_INCLUDEFILE  "ports/mimxrt/machine_pwm.c"
 #define MICROPY_PY_MACHINE_I2C              (1)
+#define MICROPY_PY_MACHINE_CAN_INCLUDEFILE  "ports/mimxrt/machine_can.c"
+// Function to determine if the given can_id is reserved for system use or not.
+#ifndef MICROPY_HW_CAN_IS_RESERVED
+#define MICROPY_HW_CAN_IS_RESERVED(can_id) (false)
+#endif
 #ifndef MICROPY_PY_MACHINE_I2C_TARGET
 #define MICROPY_PY_MACHINE_I2C_TARGET       (1)
 #define MICROPY_PY_MACHINE_I2C_TARGET_INCLUDEFILE "ports/mimxrt/machine_i2c_target.c"
@@ -145,11 +162,9 @@ uint32_t trng_random_u32(void);
 #endif
 #define MICROPY_PY_WEBSOCKET                (MICROPY_PY_LWIP)
 #define MICROPY_PY_WEBREPL                  (MICROPY_PY_LWIP)
-#define MICROPY_PY_LWIP_SOCK_RAW            (MICROPY_PY_LWIP)
 #ifndef MICROPY_PY_NETWORK_PPP_LWIP
 #define MICROPY_PY_NETWORK_PPP_LWIP         (MICROPY_PY_LWIP)
 #endif
-#define MICROPY_PY_LWIP_PPP                 (MICROPY_PY_NETWORK_PPP_LWIP)
 
 #ifndef MICROPY_PY_BLUETOOTH_ENABLE_CENTRAL_MODE
 #define MICROPY_PY_BLUETOOTH_ENABLE_CENTRAL_MODE (1)
@@ -176,7 +191,7 @@ uint32_t trng_random_u32(void);
 
 // Hooks to add builtins
 
-#if defined(IOMUX_TABLE_ENET)
+#if defined(ENET_PHY_ADDRESS) || defined(ENET_1_PHY_ADDRESS)
 extern const struct _mp_obj_type_t network_lan_type;
 #define MICROPY_HW_NIC_ETH                  { MP_ROM_QSTR(MP_QSTR_LAN), MP_ROM_PTR(&network_lan_type) },
 #else
@@ -209,15 +224,6 @@ extern const struct _mp_obj_type_t network_lan_type;
 
 #ifndef MICROPY_HW_USB_PID
 #define MICROPY_HW_USB_PID (0x9802)
-#endif
-
-#ifndef  MICROPY_EVENT_POLL_HOOK
-#define MICROPY_EVENT_POLL_HOOK \
-    do { \
-        extern void mp_handle_pending(bool); \
-        mp_handle_pending(true); \
-        __WFE(); \
-    } while (0);
 #endif
 
 #define MICROPY_MAKE_POINTER_CALLABLE(p) ((void *)((mp_uint_t)(p) | 1))

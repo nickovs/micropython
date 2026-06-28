@@ -34,8 +34,28 @@ string(TOUPPER          ZEPHYR_${BOARD} MICROPY_BOARD)
 
 include(${MICROPY_DIR}/py/py.cmake)
 include(${MICROPY_DIR}/extmod/extmod.cmake)
+include(${MICROPY_DIR}/py/usermod.cmake)
 
 list(APPEND DTS_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/dts)
+
+# Define mpy-cross flags, for use with frozen code.
+if(CONFIG_RISCV_ISA_RV32I AND CONFIG_RISCV_ISA_EXT_M AND CONFIG_RISCV_ISA_EXT_C)
+    set(ARCH_FLAGS "")
+    set(RV32_EXT "")
+    if(CONFIG_RISCV_ISA_EXT_ZBA)
+        list(APPEND RV32_EXT "zba")
+    endif()
+    if(CONFIG_RISCV_ISA_EXT_ZCMP)
+        list(APPEND RV32_EXT "zcmp")
+    endif()
+    if(RV32_EXT)
+        list(JOIN RV32_EXT "," RV32_EXT)
+        set(ARCH_FLAGS "-march-flags=${RV32_EXT}")
+    endif()
+    set(MICROPY_CROSS_FLAGS "-march=rv32imc ${ARCH_FLAGS}")
+elseif(CONFIG_RISCV_ISA_RV64I AND CONFIG_RISCV_ISA_EXT_M AND CONFIG_RISCV_ISA_EXT_C)
+    set(MICROPY_CROSS_FLAGS -march=rv64imc)
+endif()
 
 if (CONFIG_MICROPY_FROZEN_MODULES)
     cmake_path(ABSOLUTE_PATH CONFIG_MICROPY_FROZEN_MANIFEST BASE_DIRECTORY ${CMAKE_CURRENT_LIST_DIR})
@@ -116,6 +136,7 @@ list(TRANSFORM MICROPY_SOURCE_LIB PREPEND ${MICROPY_DIR}/lib/)
 set(MICROPY_SOURCE_QSTR
     ${MICROPY_SOURCE_PY}
     ${MICROPY_SOURCE_EXTMOD}
+    ${MICROPY_SOURCE_USERMOD}
     ${MICROPY_SOURCE_SHARED}
     ${MICROPY_SOURCE_DRIVERS}
     ${MICROPY_SOURCE_LIB}
@@ -134,6 +155,7 @@ zephyr_library_named(${MICROPY_TARGET})
 zephyr_library_include_directories(
     ${MICROPY_INC_CORE}
     ${MICROPY_PORT_DIR}
+    ${MICROPY_INC_USERMOD}
     ${CMAKE_CURRENT_BINARY_DIR}
 )
 

@@ -39,6 +39,7 @@
 #include "hardware/irq.h"
 #include "pico/unique_id.h"
 #include "pico/aon_timer.h"
+#include "pico/rand.h"
 
 #if MICROPY_PY_NETWORK_CYW43
 #include "lib/cyw43-driver/src/cyw43.h"
@@ -129,8 +130,7 @@ mp_uint_t mp_hal_stdout_tx_strn(const char *str, mp_uint_t len) {
 #if PICO_RISCV
 __attribute__((naked)) mp_uint_t mp_hal_ticks_cpu(void) {
     __asm volatile (
-        "li a0, 4\n" // mask value to uninhibit mcycle counter
-        "csrw mcountinhibit, a0\n" // uninhibit mcycle counter
+        "csrci mcountinhibit, 1\n" // uninhibit mcycle counter
         "csrr a0, mcycle\n" // get mcycle counter
         "ret\n"
         );
@@ -276,4 +276,11 @@ int mp_hal_is_pin_reserved(int n) {
     #else
     return false;
     #endif
+}
+
+void mp_hal_get_random(size_t n, uint8_t *buf) {
+    for (int i = 0; i < n; i += 8) {
+        uint64_t rand64 = get_rand_64();
+        memcpy(buf + i, &rand64, MIN(n - i, 8));
+    }
 }

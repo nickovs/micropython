@@ -1,7 +1,7 @@
 # Makefile fragment for generating native .mpy files from C source
 # MPY_DIR must be set to the top of the MicroPython source tree
 
-BUILD ?= build
+BUILD ?= build-$(ARCH)
 
 ECHO = @echo
 RM = /bin/rm
@@ -39,7 +39,7 @@ MPY_CROSS_FLAGS += -march=$(ARCH)
 SRC_O += $(addprefix $(BUILD)/, $(patsubst %.c,%.o,$(filter %.c,$(SRC))) $(patsubst %.S,%.o,$(filter %.S,$(SRC))))
 SRC_MPY += $(addprefix $(BUILD)/, $(patsubst %.py,%.mpy,$(filter %.py,$(SRC))))
 
-CLEAN_EXTRA += $(MOD).mpy .mpy_ld_cache
+CLEAN_EXTRA += $(MOD).mpy .mpy_ld_cache-$(ARCH)
 
 ################################################################################
 # Architecture configuration
@@ -106,7 +106,7 @@ else ifeq ($(ARCH),rv32imc)
 # rv32imc
 CROSS = riscv64-unknown-elf-
 CFLAGS_ARCH += -march=rv32imac -mabi=ilp32 -mno-relax
-# If Picolibc is available then select it explicitly.  Ubuntu 22.04 ships its
+# If Picolibc is available then select it explicitly.  Ubuntu 24.04 ships its
 # bare metal RISC-V toolchain with Picolibc rather than Newlib, and the default
 # is "nosys" so a value must be provided.  To avoid having per-distro
 # workarounds, always select Picolibc if available.
@@ -116,6 +116,25 @@ CFLAGS_ARCH += -specs=$(PICOLIBC_SPECS)
 USE_PICOLIBC := 1
 PICOLIBC_ARCH := rv32imac
 PICOLIBC_ABI := ilp32
+endif
+
+MICROPY_FLOAT_IMPL ?= none
+
+else ifeq ($(ARCH),rv64imc)
+
+# rv64imc
+CROSS = riscv64-unknown-elf-
+CFLAGS_ARCH += -march=rv64imac -mabi=lp64 -mno-relax
+# If Picolibc is available then select it explicitly.  Ubuntu 24.04 ships its
+# bare metal RISC-V toolchain with Picolibc rather than Newlib, and the default
+# is "nosys" so a value must be provided.  To avoid having per-distro
+# workarounds, always select Picolibc if available.
+PICOLIBC_SPECS := $(shell $(CROSS)gcc --print-file-name=picolibc.specs)
+ifneq ($(PICOLIBC_SPECS),picolibc.specs)
+CFLAGS_ARCH += -specs=$(PICOLIBC_SPECS)
+USE_PICOLIBC := 1
+PICOLIBC_ARCH := rv64imac
+PICOLIBC_ABI := lp64
 endif
 
 MICROPY_FLOAT_IMPL ?= none
@@ -175,6 +194,9 @@ endif
 ifneq ($(MPY_EXTERN_SYM_FILE),)
 MPY_LD_FLAGS += --externs "$(realpath $(MPY_EXTERN_SYM_FILE))"
 endif
+ifneq ($(ARCH_FLAGS),)
+MPY_LD_FLAGS += --arch-flags "$(ARCH_FLAGS)"
+endif
 
 CFLAGS += $(CFLAGS_EXTRA)
 
@@ -215,11 +237,11 @@ $(BUILD)/%.mpy: %.py
 	$(Q)$(MPY_CROSS) $(MPY_CROSS_FLAGS) -o $@ $<
 
 # Build native .mpy from object files
-$(BUILD)/$(MOD).native.mpy: $(SRC_O)
+$(BUILD)/$(MOD).mpy: $(SRC_O)
 	$(ECHO) "LINK $<"
 	$(Q)$(MPY_LD) --arch $(ARCH) --qstrs $(CONFIG_H) $(MPY_LD_FLAGS) -o $@ $^
 
 # Build final .mpy from all intermediate .mpy files
-$(MOD).mpy: $(BUILD)/$(MOD).native.mpy $(SRC_MPY)
+$(MOD).mpy: $(BUILD)/$(MOD).mpy $(SRC_MPY)
 	$(ECHO) "GEN $@"
 	$(Q)$(MPY_TOOL) --merge -o $@ $^

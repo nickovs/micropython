@@ -34,22 +34,21 @@ import subprocess
 
 # Relative to top-level repo dir.
 PATHS = [
-    "drivers/ninaw10/*.[ch]",
-    "extmod/*.[ch]",
-    "extmod/btstack/*.[ch]",
-    "extmod/nimble/*.[ch]",
+    "drivers/**/*.[ch]",
+    "examples/**/*.[ch]",
+    "extmod/**/*.[ch]",
     "lib/mbedtls_errors/tester.c",
-    "shared/netutils/*.[ch]",
-    "shared/timeutils/*.[ch]",
-    "shared/runtime/*.[ch]",
-    "shared/tinyusb/*.[ch]",
     "mpy-cross/*.[ch]",
     "ports/**/*.[ch]",
-    "py/*.[ch]",
+    "py/**/*.[ch]",
+    "shared/**/*.[ch]",
 ]
 
 EXCLUSIONS = [
+    # Fixups broken by preprocessor macro
+    "shared/readline/*.[ch]",
     # The cc3200 port is not fully formatted yet.
+    "drivers/cc3100/*/*.[ch]",
     "ports/cc3200/*/*.[ch]",
     # ESP-IDF downloads 3rd party code.
     "ports/esp32/managed_components/*",
@@ -192,7 +191,7 @@ def main():
             command.append("-v")
         else:
             command.append("-q")
-        command.append(".")
+        command.extend(files if files else ["."])
         subprocess.check_call(command, cwd=TOP)
 
 

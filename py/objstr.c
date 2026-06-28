@@ -68,6 +68,14 @@ static void check_is_str_or_bytes(mp_obj_t self_in) {
     mp_check_self(mp_obj_is_str_or_bytes(self_in));
 }
 
+static mp_obj_t make_empty_str_of_type(const mp_obj_type_t *type) {
+    if (type == &mp_type_str) {
+        return MP_OBJ_NEW_QSTR(MP_QSTR_); // empty str
+    } else {
+        return mp_const_empty_bytes;
+    }
+}
+
 static const byte *get_substring_data(const mp_obj_t obj, size_t n_args, const mp_obj_t *args, size_t *len) {
     // Get substring data from obj, using args[0,1] to specify start and end indices.
     GET_STR_DATA_LEN(obj, str, str_len);
@@ -282,7 +290,10 @@ static mp_obj_t bytes_make_new(const mp_obj_type_t *type_in, size_t n_args, size
         }
         vstr_t vstr;
         vstr_init_len(&vstr, len);
+        // If this config is set then the GC clears all memory, so we don't need to.
+        #if !MICROPY_GC_CONSERVATIVE_CLEAR
         memset(vstr.buf, 0, len);
+        #endif
         return mp_obj_new_bytes_from_vstr(&vstr);
     }
 
@@ -380,11 +391,7 @@ mp_obj_t mp_obj_str_binary_op(mp_binary_op_t op, mp_obj_t lhs_in, mp_obj_t rhs_i
             return MP_OBJ_NULL; // op not supported
         }
         if (n <= 0) {
-            if (lhs_type == &mp_type_str) {
-                return MP_OBJ_NEW_QSTR(MP_QSTR_); // empty str
-            } else {
-                return mp_const_empty_bytes;
-            }
+            return make_empty_str_of_type(lhs_type);
         }
         vstr_t vstr;
         vstr_init_len(&vstr, lhs_len * n);
@@ -763,11 +770,29 @@ static mp_obj_t str_finder(size_t n_args, const mp_obj_t *args, int direction, b
     const mp_obj_type_t *self_type = mp_obj_get_type(args[0]);
     check_is_str_or_bytes(args[0]);
 
-    // check argument type
-    str_check_arg_type(self_type, args[1]);
-
     GET_STR_DATA_LEN(args[0], haystack, haystack_len);
-    GET_STR_DATA_LEN(args[1], needle, needle_len);
+
+    mp_int_t val;
+    byte needle_data;
+    const byte *needle;
+    size_t needle_len;
+    if (self_type != &mp_type_str && mp_obj_get_int_maybe(args[1], &val)) {
+        // Allow {bytes/bytearray}.{find,index}(int).
+        #if MICROPY_FULL_CHECKS
+        if (val < 0 || val > 255) {
+            mp_raise_ValueError(MP_ERROR_TEXT("bytes value out of range"));
+        }
+        #endif
+        needle_data = val;
+        needle = &needle_data;
+        needle_len = 1;
+    } else {
+        // check argument type
+        str_check_arg_type(self_type, args[1]);
+        GET_STR_DATA_LEN(args[1], needle_tmp, needle_len_tmp);
+        needle = needle_tmp;
+        needle_len = needle_len_tmp;
+    }
 
     const byte *start = haystack;
     const byte *end = haystack + haystack_len;
@@ -903,11 +928,7 @@ static mp_obj_t str_uni_strip(int type, size_t n_args, const mp_obj_t *args) {
 
     if (!first_good_char_pos_set) {
         // string is all whitespace, return ''
-        if (self_type == &mp_type_str) {
-            return MP_OBJ_NEW_QSTR(MP_QSTR_);
-        } else {
-            return mp_const_empty_bytes;
-        }
+        return make_empty_str_of_type(self_type);
     }
 
     assert(last_good_char_pos >= first_good_char_pos);
@@ -1833,15 +1854,9 @@ static mp_obj_t str_partitioner(mp_obj_t self_in, mp_obj_t arg, int direction) {
     }
 
     mp_obj_t result[3];
-    if (self_type == &mp_type_str) {
-        result[0] = MP_OBJ_NEW_QSTR(MP_QSTR_);
-        result[1] = MP_OBJ_NEW_QSTR(MP_QSTR_);
-        result[2] = MP_OBJ_NEW_QSTR(MP_QSTR_);
-    } else {
-        result[0] = mp_const_empty_bytes;
-        result[1] = mp_const_empty_bytes;
-        result[2] = mp_const_empty_bytes;
-    }
+    result[0] = make_empty_str_of_type(self_type);
+    result[1] = make_empty_str_of_type(self_type);
+    result[2] = make_empty_str_of_type(self_type);
 
     if (direction > 0) {
         result[0] = self_in;
@@ -1998,7 +2013,7 @@ mp_obj_t mp_obj_bytes_hex(size_t n_args, const mp_obj_t *args, const mp_obj_type
     // Code below assumes non-zero buffer length when computing size with
     // separator, so handle the zero-length case here.
     if (bufinfo.len == 0) {
-        return mp_const_empty_bytes;
+        return make_empty_str_of_type(type);
     }
 
     vstr_t vstr;

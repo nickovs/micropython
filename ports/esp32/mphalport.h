@@ -37,6 +37,7 @@
 
 #include "driver/spi_master.h"
 #include "esp_cache.h"
+#include "esp_cpu.h"
 #include "soc/gpio_reg.h"
 
 #define MICROPY_PLATFORM_VERSION "IDF" IDF_VER
@@ -90,13 +91,7 @@ static inline void mp_end_atomic_section(mp_uint_t state) {
 
 mp_uint_t mp_hal_ticks_us(void);
 __attribute__((always_inline)) static inline mp_uint_t mp_hal_ticks_cpu(void) {
-    uint32_t ccount;
-    #if CONFIG_IDF_TARGET_ARCH_RISCV
-    __asm__ __volatile__ ("csrr %0, 0x7E2" : "=r" (ccount)); // Machine Performance Counter Value
-    #else
-    __asm__ __volatile__ ("rsr %0,ccount" : "=a" (ccount));
-    #endif
-    return (mp_uint_t)ccount;
+    return esp_cpu_get_cycle_count();
 }
 
 void mp_hal_delay_us(mp_uint_t);
@@ -154,5 +149,7 @@ static inline void mp_hal_pin_write(mp_hal_pin_obj_t pin, int v) {
 }
 
 spi_host_device_t machine_hw_spi_get_host(mp_obj_t in);
+
+void mp_hal_get_random(size_t n, uint8_t *buf);
 
 #endif // INCLUDED_MPHALPORT_H

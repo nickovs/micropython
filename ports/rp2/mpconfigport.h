@@ -103,10 +103,6 @@
 #if PICO_ARM
 #define MICROPY_EMIT_THUMB                      (1)
 #define MICROPY_EMIT_INLINE_THUMB               (1)
-#if PICO_RP2040
-#define MICROPY_EMIT_THUMB_ARMV7M               (0)
-#define MICROPY_EMIT_INLINE_THUMB_FLOAT         (0)
-#endif
 #elif PICO_RISCV
 #define MICROPY_EMIT_RV32                       (1)
 #define MICROPY_EMIT_RV32_ZBA                   (1)
@@ -137,12 +133,11 @@
 #ifndef MICROPY_PY_THREAD
 #define MICROPY_PY_THREAD                       (1)
 #define MICROPY_PY_THREAD_GIL                   (0)
-#define MICROPY_THREAD_YIELD()                  mp_handle_pending(true)
+#define MICROPY_THREAD_YIELD()                  mp_handle_pending(MP_HANDLE_PENDING_CALLBACKS_AND_EXCEPTIONS)
 #endif
 
 // Extended modules
 #define MICROPY_EPOCH_IS_1970                   (1)
-#define MICROPY_PY_OS_INCLUDEFILE               "ports/rp2/modos.c"
 #ifndef MICROPY_PY_OS_DUPTERM
 #define MICROPY_PY_OS_DUPTERM                   (1)
 #define MICROPY_PY_OS_DUPTERM_NOTIFY            (1)
@@ -158,7 +153,7 @@
 #define MICROPY_PY_TIME_GMTIME_LOCALTIME_MKTIME (1)
 #define MICROPY_PY_TIME_TIME_TIME_NS            (1)
 #define MICROPY_PY_TIME_INCLUDEFILE             "ports/rp2/modtime.c"
-#define MICROPY_PY_RANDOM_SEED_INIT_FUNC        (rosc_random_u32())
+#define MICROPY_PY_RANDOM_SEED_INIT_FUNC        (get_rand_32())
 #define MICROPY_PY_MACHINE                      (1)
 #define MICROPY_PY_MACHINE_INCLUDEFILE          "ports/rp2/modmachine.c"
 #define MICROPY_PY_MACHINE_RESET                (1)
@@ -203,8 +198,6 @@
 #define MICROPY_VFS_FAT                         (1)
 #define MICROPY_VFS_ROM                         (MICROPY_HW_ROMFS_BYTES > 0)
 #define MICROPY_SSL_MBEDTLS                     (1)
-#define MICROPY_PY_LWIP_PPP                     (MICROPY_PY_NETWORK_PPP_LWIP)
-#define MICROPY_PY_LWIP_SOCK_RAW                (MICROPY_PY_LWIP)
 
 // Hardware timer alarm index. Available range 0-3.
 // Number 3 is currently used by pico-sdk alarm pool (PICO_TIME_DEFAULT_ALARM_POOL_HARDWARE_ALARM_NUM)
@@ -247,7 +240,7 @@
 #endif
 
 #ifndef MICROPY_PY_NETWORK_PPP_LWIP
-#define MICROPY_PY_NETWORK_PPP_LWIP     (0)
+#define MICROPY_PY_NETWORK_PPP_LWIP     (MICROPY_PY_LWIP)
 #endif
 #endif
 
@@ -292,9 +285,10 @@ typedef intptr_t mp_off_t;
 #define BINARY_INFO_ID_MP_FROZEN 0x4a99d719
 #define MICROPY_FROZEN_LIST_ITEM(name, file) bi_decl(bi_string(BINARY_INFO_TAG_MICROPYTHON, BINARY_INFO_ID_MP_FROZEN, name))
 
-extern uint32_t rosc_random_u32(void);
+#include "pico/rand.h"
 extern void lwip_lock_acquire(void);
 extern void lwip_lock_release(void);
+extern void lwip_poll_hook(void);
 
 #if MICROPY_PY_BLUETOOTH || MICROPY_PY_BLUETOOTH_CYW43
 // Bluetooth code only runs in the scheduler, no locking/mutex required.

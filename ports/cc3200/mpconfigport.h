@@ -69,6 +69,7 @@
 #define MICROPY_CAN_OVERRIDE_BUILTINS               (1)
 #define MICROPY_USE_INTERNAL_ERRNO                  (1)
 #define MICROPY_VFS                                 (1)
+#define MICROPY_VFS_BLOCKDEV_NATIVE                 (1)
 #define MICROPY_VFS_FAT                             (1)
 #define MICROPY_PY_ASYNC_AWAIT                      (0)
 #define MICROPY_PY_ALL_SPECIAL_METHODS              (1)
@@ -95,7 +96,6 @@
 #define MICROPY_PY_JSON                             (1)
 #define MICROPY_PY_RE                               (1)
 #define MICROPY_PY_OS                               (1)
-#define MICROPY_PY_OS_INCLUDEFILE                   "ports/cc3200/mods/modos.c"
 #define MICROPY_PY_OS_DUPTERM                       (1)
 #define MICROPY_PY_OS_SYNC                          (1)
 #define MICROPY_PY_OS_URANDOM                       (1)

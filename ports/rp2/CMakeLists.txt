@@ -84,9 +84,6 @@ endif()
 list(APPEND GIT_SUBMODULES lib/mbedtls)
 list(APPEND GIT_SUBMODULES lib/tinyusb)
 
-# Workaround for pico-sdk host toolchain issue, see directory for details
-list(APPEND CMAKE_MODULE_PATH "${MICROPY_PORT_DIR}/tools_patch")
-
 # Include component cmake fragments
 include(${MICROPY_DIR}/py/py.cmake)
 include(${MICROPY_DIR}/extmod/extmod.cmake)
@@ -197,7 +194,6 @@ set(MICROPY_SOURCE_QSTR
     ${MICROPY_PORT_DIR}/machine_uart.c
     ${MICROPY_PORT_DIR}/machine_wdt.c
     ${MICROPY_PORT_DIR}/modrp2.c
-    ${MICROPY_PORT_DIR}/modos.c
     ${MICROPY_PORT_DIR}/rp2_flash.c
     ${MICROPY_PORT_DIR}/rp2_pio.c
     ${MICROPY_PORT_DIR}/rp2_dma.c
@@ -235,9 +231,11 @@ set(PICO_SDK_COMPONENTS
     pico_flash
     pico_multicore
     pico_platform
+    pico_platform_common
     pico_platform_compiler
     pico_platform_panic
     pico_platform_sections
+    pico_rand
     pico_runtime
     pico_runtime_init
     pico_stdio
@@ -479,6 +477,10 @@ if (MICROPY_PY_NETWORK_WIZNET5K)
     )
 endif()
 
+list(APPEND MICROPY_SOURCE_EXTMOD
+    ${MICROPY_EXTMOD_DIR}/mbedtls/mbedtls_alt.c
+)
+
 # Add qstr sources for extmod and usermod, in case they are modified by components above.
 list(APPEND MICROPY_SOURCE_QSTR
     ${MICROPY_SOURCE_EXTMOD}
@@ -535,25 +537,35 @@ target_compile_options(${MICROPY_TARGET} PRIVATE
 target_link_options(${MICROPY_TARGET} PRIVATE
     -Wl,--defsym=__micropy_c_heap_size__=${MICROPY_C_HEAP_SIZE}
     -Wl,--wrap=runtime_init_clocks
+    -Wl,--print-memory-usage
+    -Wl,--cref
 )
 
 if(DEFINED PICO_FLASH_SIZE_BYTES)
     target_link_options(${MICROPY_TARGET} PRIVATE
         -Wl,--defsym=__micropy_flash_size__=${PICO_FLASH_SIZE_BYTES}
     )
-elseif(PICO_RP2040)
-    target_link_options(${MICROPY_TARGET} PRIVATE
-        -Wl,--defsym=__micropy_flash_size__=2048k # Default to 2MB
-    )
-elseif(PICO_RP2350)
-    target_link_options(${MICROPY_TARGET} PRIVATE
-        -Wl,--defsym=__micropy_flash_size__=4096k # Default to 4MB
-    )
+else(PICO_RP2040)
+    message(FATAL_ERROR "PICO_FLASH_SIZE_BYTES must be defined")
 endif()
 
 if(PICO_RP2350)
     target_link_options(${MICROPY_TARGET} PRIVATE
         -Wl,--defsym=__micropy_extra_stack__=4096
+    )
+endif()
+
+# MICROPY_HW_FLASH_STORAGE_BYTES is set via board mpconfigboard.cmake or
+# MICROPY_HW_FLASH_STORAGE_BYTES variable.
+# Expose it as a linker symbol so the linker script can assert the firmware
+# doesn't overlap the filesystem and as a compile definition so
+# rp2_flash.c uses the correct storage base address.
+if(DEFINED MICROPY_HW_FLASH_STORAGE_BYTES)
+    target_link_options(${MICROPY_TARGET} PRIVATE
+        -Wl,--defsym=__micropy_flash_storage_bytes__=${MICROPY_HW_FLASH_STORAGE_BYTES}
+    )
+    target_compile_definitions(${MICROPY_TARGET} PRIVATE
+        MICROPY_HW_FLASH_STORAGE_BYTES=${MICROPY_HW_FLASH_STORAGE_BYTES}
     )
 endif()
 
@@ -633,13 +645,6 @@ endif()
 
 pico_add_extra_outputs(${MICROPY_TARGET})
 
-pico_find_compiler_with_triples(PICO_COMPILER_SIZE "${PICO_GCC_TRIPLE}" size)
-
-add_custom_command(TARGET ${MICROPY_TARGET}
-    POST_BUILD
-    COMMAND ${PICO_COMPILER_SIZE} --format=berkeley ${PROJECT_BINARY_DIR}/${MICROPY_TARGET}.elf
-    VERBATIM
-)
 
 # Collect all the include directories and compile definitions for the pico-sdk components.
 foreach(comp ${PICO_SDK_COMPONENTS})

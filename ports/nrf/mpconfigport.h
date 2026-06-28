@@ -69,6 +69,11 @@
 #define MICROPY_VFS                        (CORE_FEAT)
 #endif
 
+// VfsROM filesystem
+#ifndef MICROPY_VFS_ROM
+#define MICROPY_VFS_ROM                    (CORE_FEAT)
+#endif
+
 // micro:bit filesystem
 #ifndef MICROPY_MBFS
 #define MICROPY_MBFS                       (!MICROPY_VFS)
@@ -82,9 +87,7 @@
 #define MICROPY_PY_ARRAY_SLICE_ASSIGN      (CORE_FEAT)
 #endif
 
-#ifndef MICROPY_PY_SYS_PLATFORM
 #define MICROPY_PY_SYS_PLATFORM            "nrf"
-#endif
 
 #ifndef MICROPY_PY_SYS_STDFILES
 #define MICROPY_PY_SYS_STDFILES            (CORE_FEAT)
@@ -92,6 +95,10 @@
 
 #ifndef MICROPY_PY_BINASCII
 #define MICROPY_PY_BINASCII                (CORE_FEAT)
+#endif
+
+#ifndef MICROPY_PY_SELECT
+#define MICROPY_PY_SELECT                  (MICROPY_PY_ASYNCIO)
 #endif
 
 #ifndef MICROPY_PY_NRF
@@ -274,6 +281,7 @@
 #define MICROPY_PY_ATTRTUPLE                  (1)
 #define MICROPY_PY_BUILTINS_BYTEARRAY         (1)
 #define MICROPY_PY_BUILTINS_DICT_FROMKEYS     (1)
+#define MICROPY_PY_BUILTINS_DIR               (1)
 #define MICROPY_PY_BUILTINS_ENUMERATE         (1)
 #define MICROPY_PY_BUILTINS_EVAL_EXEC         (1)
 #define MICROPY_PY_BUILTINS_FILTER            (1)
@@ -348,10 +356,11 @@ long unsigned int rng_generate_random_word(void);
 #include "boardmodules.h"
 #endif // BOARD_SPECIFIC_MODULES
 
-// extra built in names to add to the global namespace
+#if MICROPY_MBFS
+// The builtins.open function must be explicitly added when using the micro:bit filesystem.
 #define MICROPY_PORT_BUILTINS \
-    { MP_ROM_QSTR(MP_QSTR_help), MP_ROM_PTR(&mp_builtin_help_obj) }, \
-    { MP_ROM_QSTR(MP_QSTR_open), MP_ROM_PTR(&mp_builtin_open_obj) }, \
+    { MP_ROM_QSTR(MP_QSTR_open), MP_ROM_PTR(&mp_builtin_open_obj) },
+#endif
 
 // extra constants
 #define MICROPY_PORT_CONSTANTS \
@@ -374,8 +383,7 @@ long unsigned int rng_generate_random_word(void);
 
 #define MICROPY_EVENT_POLL_HOOK \
     do { \
-        extern void mp_handle_pending(bool); \
-        mp_handle_pending(true); \
+        mp_handle_pending(MP_HANDLE_PENDING_CALLBACKS_AND_EXCEPTIONS); \
         __WFI(); \
     } while (0);
 

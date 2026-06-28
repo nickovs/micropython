@@ -105,6 +105,9 @@ void mp_init(void) {
     #if MICROPY_EMIT_NATIVE
     MP_STATE_VM(default_emit_opt) = MP_EMIT_OPT_NONE;
     #endif
+    #if MICROPY_DEBUG_PRINTERS
+    MP_STATE_VM(mp_verbose_flag) = 0;
+    #endif
     #endif
 
     // init global module dict
@@ -123,7 +126,7 @@ void mp_init(void) {
     MP_STATE_VM(mp_module_builtins_override_dict) = NULL;
     #endif
 
-    #if MICROPY_EMIT_MACHINE_CODE && (MICROPY_PERSISTENT_CODE_TRACK_FUN_DATA || MICROPY_PERSISTENT_CODE_TRACK_BSS_RODATA)
+    #if (MICROPY_EMIT_INLINE_ASM || MICROPY_ENABLE_NATIVE_CODE) && (MICROPY_PERSISTENT_CODE_TRACK_FUN_DATA || MICROPY_PERSISTENT_CODE_TRACK_BSS_RODATA)
     MP_STATE_VM(persistent_code_root_pointers) = MP_OBJ_NULL;
     #endif
 
@@ -177,6 +180,10 @@ void mp_init(void) {
 
     #if MICROPY_HW_ENABLE_USB_RUNTIME_DEVICE
     MP_STATE_VM(usbd) = MP_OBJ_NULL;
+    #endif
+
+    #if MICROPY_PY_WEAKREF
+    mp_map_init(&MP_STATE_VM(mp_weakref_map), 0);
     #endif
 
     #if MICROPY_PY_THREAD_GIL
@@ -1508,7 +1515,7 @@ mp_obj_t mp_make_raise_obj(mp_obj_t o) {
     }
 
     if (mp_obj_is_exception_instance(o)) {
-        // o is an instance of an exception, so use it as the exception
+        // o is a fully-constructed instance of an exception, so use it as the exception
         return o;
     } else {
         // o cannot be used as an exception, so return a type error (which will be raised by the caller)
@@ -1592,19 +1599,19 @@ import_error:
 void mp_import_all(mp_obj_t module) {
     DEBUG_printf("import all %p\n", module);
 
-    mp_map_t *map = &mp_obj_module_get_globals(module)->map;
+    mp_obj_t dest[2];
 
     #if MICROPY_MODULE___ALL__
-    mp_map_elem_t *elem = mp_map_lookup(map, MP_OBJ_NEW_QSTR(MP_QSTR___all__), MP_MAP_LOOKUP);
-    if (elem != NULL) {
+
+    mp_load_method_maybe(module, MP_QSTR___all__, dest);
+    if (dest[0] != MP_OBJ_NULL) {
         // When __all__ is defined, we must explicitly load all specified
         // symbols, possibly invoking the module __getattr__ function
         size_t len;
         mp_obj_t *items;
-        mp_obj_get_array(elem->value, &len, &items);
+        mp_obj_get_array(dest[0], &len, &items);
         for (size_t i = 0; i < len; i++) {
             qstr qname = mp_obj_str_get_qstr(items[i]);
-            mp_obj_t dest[2];
             mp_load_method(module, qname, dest);
             mp_store_name(qname, dest[0]);
         }
@@ -1612,8 +1619,19 @@ void mp_import_all(mp_obj_t module) {
     }
     #endif
 
+    #if MICROPY_CPYTHON_COMPAT
+    // Load the dict from the module.  In MicroPython, if __dict__ is
+    // available then it always returns a native mp_obj_dict_t instance.
+    mp_load_method(module, MP_QSTR___dict__, dest);
+    #else
+    // Without MICROPY_CPYTHON_COMPAT __dict__ is not available, so just
+    // assume the given module is actually an mp_obj_module_t instance.
+    dest[0] = MP_OBJ_FROM_PTR(mp_obj_module_get_globals(module));
+    #endif
+
     // By default, the set of public names includes all names found in the module's
     // namespace which do not begin with an underscore character ('_')
+    mp_map_t *map = mp_obj_dict_get_map(dest[0]);
     for (size_t i = 0; i < map->alloc; i++) {
         if (mp_map_slot_is_filled(map, i)) {
             // Entry in module global scope may be generated programmatically
@@ -1764,7 +1782,7 @@ MP_NORETURN void mp_raise_OSError_with_filename(int errno_, const char *filename
     nlr_raise(mp_obj_exception_make_new(&mp_type_OSError, 2, 0, args));
 }
 
-#if MICROPY_STACK_CHECK || MICROPY_ENABLE_PYSTACK
+#if MICROPY_STACK_CHECK
 MP_NORETURN void mp_raise_recursion_depth(void) {
     mp_raise_type_arg(&mp_type_RuntimeError, MP_OBJ_NEW_QSTR(MP_QSTR_maximum_space_recursion_space_depth_space_exceeded));
 }

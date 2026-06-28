@@ -275,7 +275,7 @@ static mp_obj_t esp_scan(mp_obj_t self_in) {
         // esp_scan_list variable to NULL without disabling interrupts
         if (MP_STATE_THREAD(mp_pending_exception) != NULL) {
             esp_scan_list = NULL;
-            mp_handle_pending(true);
+            mp_handle_pending(MP_HANDLE_PENDING_CALLBACKS_AND_EXCEPTIONS);
         }
         ets_loop_iter();
     }
@@ -559,7 +559,10 @@ static mp_obj_t esp_config(size_t n_args, const mp_obj_t *args, mp_map_t *kwargs
                         if (bufinfo.len != 6) {
                             mp_raise_ValueError(MP_ERROR_TEXT("invalid buffer length"));
                         }
-                        wifi_set_macaddr(self->if_id, bufinfo.buf);
+                        // The MAC address must be in a word-aligned DRAM buffer.
+                        uint8_t mac[6];
+                        memcpy(mac, bufinfo.buf, sizeof(mac));
+                        wifi_set_macaddr(self->if_id, mac);
                         break;
                     }
                     case MP_QSTR_ssid:
